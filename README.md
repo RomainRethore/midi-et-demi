@@ -26,6 +26,7 @@ fermés ne se laissent pas remapper comme on veut.
 
 - [`SPEC.md`](SPEC.md) — les spécifications fonctionnelles (le *quoi*).
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — le découpage en couches (le *comment*).
+- [`BUILD.md`](BUILD.md) — compiler et lancer l'app sur macOS.
 
 ## État
 
