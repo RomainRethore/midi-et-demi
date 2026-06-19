@@ -1,0 +1,40 @@
+# Dossiers de build (out-of-source)
+build/
+cmake-build-*/
+out/
+
+# Artefacts de compilation C/C++
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# CMake (si jamais généré à la racine)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+
+# Sorties / projets générés par JUCE & IDE
+Builds/
+JuceLibraryCode/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# IDE / éditeurs
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
+
+# Fichiers de session/rendus produits par l'app (à ne pas versionner)
+*.wav
+*.aiff
