@@ -36,6 +36,7 @@ private:
     juce::TextButton   playButton   { "Lecture" };
     juce::Slider       bpmSlider;
     juce::Label        bpmLabel      { {}, "Tempo" };
+    juce::Label        bpmUnitLabel  { {}, "BPM" };
     juce::ToggleButton metronomeToggle { "Metronome" };
     juce::Label        positionLabel;
     bool               isPlaying = false;

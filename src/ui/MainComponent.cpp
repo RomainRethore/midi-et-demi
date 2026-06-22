@@ -25,9 +25,11 @@ MainComponent::MainComponent()
     bpmSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 24);
     bpmSlider.setRange (40.0, 240.0, 1.0);
     bpmSlider.setValue (120.0, juce::dontSendNotification);
-    bpmSlider.setTextValueSuffix (" BPM");
     bpmSlider.onValueChange = [this] { engine.setTempo (bpmSlider.getValue()); };
     engine.setTempo (bpmSlider.getValue());
+
+    addAndMakeVisible (bpmUnitLabel);
+    bpmUnitLabel.setJustificationType (juce::Justification::centredLeft);
 
     addAndMakeVisible (metronomeToggle);
     metronomeToggle.setToggleState (true, juce::dontSendNotification);
@@ -76,9 +78,10 @@ void MainComponent::resized()
 
     auto transportRow = area.removeFromTop (40);
     playButton     .setBounds (transportRow.removeFromLeft (100).reduced (2));
-    bpmLabel       .setBounds (transportRow.removeFromLeft (60).reduced (2));
-    bpmSlider      .setBounds (transportRow.removeFromLeft (300).reduced (2));
-    metronomeToggle.setBounds (transportRow.removeFromLeft (130).reduced (2));
+    bpmLabel       .setBounds (transportRow.removeFromLeft (55).reduced (2));
+    bpmSlider      .setBounds (transportRow.removeFromLeft (240).reduced (2));
+    bpmUnitLabel   .setBounds (transportRow.removeFromLeft (45).reduced (2));
+    metronomeToggle.setBounds (transportRow.removeFromLeft (120).reduced (2));
     positionLabel  .setBounds (transportRow.reduced (2));
     area.removeFromTop (8);
 

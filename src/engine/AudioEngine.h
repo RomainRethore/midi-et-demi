@@ -53,9 +53,9 @@ private:
     med::Transport transport;
     med::Metronome metronome;
     static constexpr int numerator = 4; // signature 4/4 fixe pour l'étape 2
-    bool   prevPlaying  = false;
-    long   nextBeatIndex = 0;
-    double nextBeatPos   = 0.0;
+    bool   prevPlaying = false;
+    long   beatCounter = 0;     // nombre de temps écoulés (pour l'accent de mesure)
+    double nextBeatPos = 0.0;   // position absolue (samples) du prochain temps
 
     // --- échanges avec l'UI ---
     std::atomic<double> requestedBpm     { 120.0 };

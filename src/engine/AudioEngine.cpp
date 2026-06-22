@@ -85,8 +85,8 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     {
         transport.rewind();
         transport.start();
-        nextBeatIndex = 0;
-        nextBeatPos   = 0.0;
+        beatCounter = 0;
+        nextBeatPos = 0.0;
         metronome.reset();
     }
     else if (! wantPlay && prevPlaying)
@@ -111,12 +111,13 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
             const double absPos = startPos + (double) i;
             while (absPos >= nextBeatPos)
             {
-                const bool downbeat = (nextBeatIndex % numerator == 0);
+                const bool downbeat = (beatCounter % numerator == 0);
                 if (metroOn)
                     metronome.trigger (downbeat);
 
-                ++nextBeatIndex;
-                nextBeatPos = (double) nextBeatIndex * spb;
+                ++beatCounter;
+                nextBeatPos += spb; // incrémental : un changement de tempo
+                                    // n'affecte que l'espacement à venir
             }
         }
 
