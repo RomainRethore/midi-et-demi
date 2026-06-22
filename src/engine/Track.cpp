@@ -18,7 +18,7 @@ void Track::prepare (double sampleRate, int blockSize)
     currentBlockSize  = blockSize;
 
     synth.setCurrentPlaybackSampleRate (sampleRate);
-    clip.reserve (20000);
+    clip.reserve (med::LoopClip::maxEvents); // capacité fixe => pas de réallocation
     passStarts.reserve (4096);
     trackBuffer.setSize (2, blockSize, false, false, true);
 

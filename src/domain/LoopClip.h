@@ -35,8 +35,15 @@ public:
     /** Ne garde que les n premiers événements (annulation d'une passe d'overdub). */
     void truncate (std::size_t n) noexcept { if (n < events.size()) events.resize (n); }
 
+    /** Plafond dur : combiné à reserve(maxEvents), garantit que le tableau ne
+        se réalloue jamais => lecture concurrente sûre depuis l'UI. */
+    static constexpr std::size_t maxEvents = 50000;
+
     void addEvent (double beat, const uint8_t* data, int n)
     {
+        if (events.size() >= maxEvents)
+            return;
+
         ClipEvent e;
         e.beat     = beat;
         e.numBytes = (n > 3 ? 3 : (n < 0 ? 0 : n));
@@ -44,6 +51,10 @@ public:
             e.bytes[i] = data[i];
         events.push_back (e);
     }
+
+    /** Accès lecture seule (pour la visualisation). Le tableau ne réallouant
+        jamais, une copie côté UI est sûre même en cours d'enregistrement. */
+    const std::vector<ClipEvent>& getEvents() const noexcept { return events; }
 
     /** Appelle fn(event, offsetBeats) pour chaque événement dont la position
         est dans [fromBeat, toBeat). offsetBeats = event.beat - fromBeat.

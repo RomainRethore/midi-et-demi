@@ -42,6 +42,14 @@ public:
 
     const juce::AudioBuffer<float>& getOutput() const noexcept { return trackBuffer; }
 
+    /** Copie les événements + la longueur pour la visualisation (appelé par l'UI). */
+    void getDisplayData (std::vector<med::ClipEvent>& out, double& lengthBeats) const
+    {
+        lengthBeats = clip.getLengthBeats();
+        const auto& e = clip.getEvents();
+        out.assign (e.begin(), e.end());
+    }
+
     // --- contrôles UI (atomiques) ---
     void  setVolume (float v) noexcept { volume.store (v); }
     float getVolume() const noexcept   { return volume.load(); }

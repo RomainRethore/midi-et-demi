@@ -98,13 +98,14 @@ MainComponent::MainComponent()
     addAndMakeVisible (activeInfoLabel);
     activeInfoLabel.setJustificationType (juce::Justification::centredLeft);
 
+    addAndMakeVisible (loopLanes);
     addAndMakeVisible (keyboard);
 
     engine.start();
     selectTrack (0);
-    startTimerHz (15);
+    startTimerHz (30); // visu fluide de la tete de lecture
 
-    setSize (900, 560);
+    setSize (920, 700);
 }
 
 MainComponent::~MainComponent()
@@ -156,8 +157,11 @@ void MainComponent::resized()
     volumeSlider.setBounds (activeRow2.removeFromLeft (240).reduced (2));
     muteToggle  .setBounds (activeRow2.removeFromLeft (90).reduced (2));
     activeInfoLabel.setBounds (activeRow2.reduced (2));
+    area.removeFromTop (8);
 
-    keyboard.setBounds (area.removeFromBottom (120));
+    keyboard.setBounds (area.removeFromBottom (110));
+    area.removeFromBottom (8);
+    loopLanes.setBounds (area); // occupe l'espace restant
 }
 
 void MainComponent::selectTrack (int index)
@@ -176,6 +180,8 @@ void MainComponent::refreshActiveControls()
 
 void MainComponent::timerCallback()
 {
+    loopLanes.update();
+
     statusLabel.setText (engine.getStatusText(), juce::dontSendNotification);
 
     const bool   playing   = engine.isPlaying();

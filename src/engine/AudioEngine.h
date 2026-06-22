@@ -113,6 +113,10 @@ public:
     int    getTrackBars (int i) noexcept            { return source.getTrack (i).getBars(); }
     int    getTrackLoopState (int i) noexcept       { return source.getTrack (i).getLoopState(); }
     juce::String getTrackPluginName (int i)         { return source.getTrack (i).getPluginName(); }
+    void   getTrackDisplay (int i, std::vector<med::ClipEvent>& out, double& lengthBeats)
+    {
+        source.getTrack (i).getDisplayData (out, lengthBeats);
+    }
 
     void handleIncomingMidiMessage (juce::MidiInput* midiSource,
                                     const juce::MidiMessage& message) override;
