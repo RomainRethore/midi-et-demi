@@ -43,3 +43,12 @@ target_link_libraries(MidiEtDemi PRIVATE
     juce::juce_audio_utils                 # tire audio_basics/devices/formats/processors + GUI
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
+
+# --- Tests unitaires de la couche domaine (C++ pur, sans JUCE) -----------------
+enable_testing()
+
+add_executable(transport_tests tests/transport_tests.cpp)
+target_include_directories(transport_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(transport_tests PRIVATE cxx_std_17)
+
+add_test(NAME transport_tests COMMAND transport_tests)

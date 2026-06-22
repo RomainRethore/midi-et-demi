@@ -1,28 +1,38 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <atomic>
+#include "domain/Transport.h"
 #include "engine/SineSynth.h"
+#include "engine/Metronome.h"
 #include "engine/PluginHost.h"
 
 /**
-    Source audio appelée par le fil temps réel. Joue le plugin instrument s'il
-    est chargé, sinon le synthé sinus de secours. Le plugin est protégé par un
-    verrou : on le pose côté fil message, et le fil audio n'utilise qu'un
-    try-lock (jamais d'attente bloquante => pas de coupure de son).
+    Source audio appelée par le fil temps réel. Elle :
+      - rend l'instrument (plugin chargé, sinon synthé sinus de secours),
+      - fait avancer l'horloge musicale (Transport),
+      - place les clics du métronome à l'échantillon près.
+
+    Les contrôles venant de l'UI (BPM, lecture, métronome) passent par des
+    variables atomiques, lues en début de bloc : pas de verrou sur le chemin
+    audio (hormis l'échange de plugin, protégé par try-lock).
 */
-class InstrumentSource : public juce::AudioSource
+class EngineAudioSource : public juce::AudioSource
 {
 public:
-    explicit InstrumentSource (juce::MidiKeyboardState& keyStateToUse);
+    explicit EngineAudioSource (juce::MidiKeyboardState& keyStateToUse);
 
-    /** File thread-safe par laquelle on injecte le MIDI du clavier physique. */
     juce::MidiMessageCollector* getMidiCollector() noexcept { return &midiCollector; }
 
-    /** Remplace l'instrument courant (appelé depuis le fil message). */
     void setPlugin (std::unique_ptr<juce::AudioPluginInstance> newPlugin);
-
-    /** Pointeur sur le plugin courant (pour créer son éditeur). Peut être nul. */
     juce::AudioPluginInstance* getPlugin() const noexcept { return plugin.get(); }
+
+    // --- contrôles transport (appelés depuis le fil message) ---
+    void setTempo (double bpm) noexcept            { requestedBpm.store (bpm); }
+    void setPlaying (bool shouldPlay) noexcept      { requestedPlaying.store (shouldPlay); }
+    void setMetronomeEnabled (bool on) noexcept     { metronomeEnabled.store (on); }
+    double getPositionInBeats() const noexcept      { return publishedBeats.load(); }
+    int    getNumerator() const noexcept            { return numerator; }
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
@@ -39,12 +49,26 @@ private:
     double currentSampleRate = 44100.0;
     int    currentBlockSize  = 512;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InstrumentSource)
+    // --- horloge + métronome (état détenu par le fil audio) ---
+    med::Transport transport;
+    med::Metronome metronome;
+    static constexpr int numerator = 4; // signature 4/4 fixe pour l'étape 2
+    bool   prevPlaying  = false;
+    long   nextBeatIndex = 0;
+    double nextBeatPos   = 0.0;
+
+    // --- échanges avec l'UI ---
+    std::atomic<double> requestedBpm     { 120.0 };
+    std::atomic<bool>   requestedPlaying { false };
+    std::atomic<bool>   metronomeEnabled { true };
+    std::atomic<double> publishedBeats   { 0.0 };
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
 
 /**
-    Couche MOTEUR (engine). Possède la carte son, l'instrument (plugin ou synthé)
-    et l'entrée MIDI. Sa façade publique reste simple : start / load / état.
+    Couche MOTEUR (engine). Possède la carte son, l'instrument, l'entrée MIDI,
+    et expose le transport. Façade simple pour l'UI.
 */
 class AudioEngine : public juce::MidiInputCallback
 {
@@ -52,22 +76,22 @@ public:
     AudioEngine();
     ~AudioEngine() override;
 
-    /** Ouvre la sortie audio et connecte tous les claviers MIDI disponibles. */
     void start();
 
-    /** État partagé avec le clavier à l'écran (UI). */
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
 
-    /** Charge un plugin depuis un fichier. Retourne "" si OK, sinon le message d'erreur. */
     juce::String loadPluginFromFile (const juce::File& file);
-
-    /** Plugin courant (pour ouvrir son éditeur). Peut être nul. */
-    juce::AudioPluginInstance* getLoadedPlugin() const noexcept { return instrument.getPlugin(); }
-
+    juce::AudioPluginInstance* getLoadedPlugin() const noexcept { return source.getPlugin(); }
     juce::String getLoadedPluginName() const;
     juce::String getStatusText();
 
-    // --- juce::MidiInputCallback (appelé sur le fil MIDI) ---
+    // --- transport ---
+    void   setTempo (double bpm) noexcept        { source.setTempo (bpm); }
+    void   setPlaying (bool shouldPlay) noexcept { source.setPlaying (shouldPlay); }
+    void   setMetronomeEnabled (bool on) noexcept { source.setMetronomeEnabled (on); }
+    double getPositionInBeats() const noexcept   { return source.getPositionInBeats(); }
+    int    getNumerator() const noexcept         { return source.getNumerator(); }
+
     void handleIncomingMidiMessage (juce::MidiInput* source,
                                     const juce::MidiMessage& message) override;
 
@@ -75,7 +99,7 @@ private:
     juce::AudioDeviceManager deviceManager;
     juce::AudioSourcePlayer  sourcePlayer;
     juce::MidiKeyboardState  keyboardState;
-    InstrumentSource         instrument { keyboardState };
+    EngineAudioSource        source { keyboardState };
     PluginHost               pluginHost;
     juce::StringArray        openedMidiInputs;
 

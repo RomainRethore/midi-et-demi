@@ -5,8 +5,8 @@
 #include "ui/PluginEditorWindow.h"
 
 /**
-    Couche UI. Clavier à l'écran, statut, et boutons pour charger un plugin
-    instrument et ouvrir son interface. Ne connaît que la façade de AudioEngine.
+    Couche UI. Transport (Lecture/Stop, BPM, métronome, position), chargement de
+    plugin + éditeur, et clavier à l'écran. Ne connaît que la façade de AudioEngine.
 */
 class MainComponent : public juce::Component,
                       private juce::Timer
@@ -20,6 +20,7 @@ public:
 
 private:
     void timerCallback() override;
+    void togglePlay();
     void openPluginFile();
     void showPluginEditor();
 
@@ -28,10 +29,20 @@ private:
     juce::MidiKeyboardComponent keyboard { engine.getKeyboardState(),
                                            juce::MidiKeyboardComponent::horizontalKeyboard };
 
-    juce::Label      titleLabel;
-    juce::Label      statusLabel;
-    juce::TextButton loadButton   { "Charger un plugin..." };
-    juce::TextButton editorButton { "Ouvrir l'editeur" };
+    juce::Label        titleLabel;
+    juce::Label        statusLabel;
+
+    // transport
+    juce::TextButton   playButton   { "Lecture" };
+    juce::Slider       bpmSlider;
+    juce::Label        bpmLabel      { {}, "Tempo" };
+    juce::ToggleButton metronomeToggle { "Metronome" };
+    juce::Label        positionLabel;
+    bool               isPlaying = false;
+
+    // plugin
+    juce::TextButton   loadButton   { "Charger un plugin..." };
+    juce::TextButton   editorButton { "Ouvrir l'editeur" };
 
     std::unique_ptr<juce::FileChooser>  fileChooser;
     std::unique_ptr<PluginEditorWindow> pluginWindow;
