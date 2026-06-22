@@ -41,6 +41,13 @@ private:
     juce::Label        positionLabel;
     bool               isPlaying = false;
 
+    // boucle
+    juce::Label        barsLabel     { {}, "Mesures" };
+    juce::ComboBox     barsCombo;
+    juce::TextButton   recordButton  { "Enregistrer" };
+    juce::TextButton   clearButton   { "Effacer" };
+    juce::Label        loopStateLabel;
+
     // plugin
     juce::TextButton   loadButton   { "Charger un plugin..." };
     juce::TextButton   editorButton { "Ouvrir l'editeur" };

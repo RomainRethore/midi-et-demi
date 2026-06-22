@@ -1,6 +1,7 @@
 #include "engine/AudioEngine.h"
 
 #include <cmath>
+#include <cstdint>
 
 //==============================================================================
 // EngineAudioSource
@@ -8,7 +9,7 @@
 EngineAudioSource::EngineAudioSource (juce::MidiKeyboardState& keyStateToUse)
     : keyboardState (keyStateToUse)
 {
-    for (int i = 0; i < 8; ++i)        // 8 voix de secours (synthé sinus)
+    for (int i = 0; i < 8; ++i)
         synth.addVoice (new SineVoice());
 
     synth.addSound (new SineSound());
@@ -25,6 +26,8 @@ void EngineAudioSource::prepareToPlay (int samplesPerBlockExpected, double sampl
     transport.prepare (sampleRate);
     transport.setTimeSignature (numerator, 4);
     metronome.prepare (sampleRate);
+
+    clip.reserve (20000); // évite les réallocations pendant l'enregistrement
 
     const juce::ScopedLock sl (pluginLock);
     if (plugin != nullptr)
@@ -48,38 +51,17 @@ void EngineAudioSource::setPlugin (std::unique_ptr<juce::AudioPluginInstance> ne
 
 void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
+    const int numSamples  = bufferToFill.numSamples;
+    const int startSample = bufferToFill.startSample;
     bufferToFill.clearActiveBufferRegion();
 
-    // 1) MIDI : clavier physique (file) + clavier à l'écran (état).
-    juce::MidiBuffer incomingMidi;
-    midiCollector.removeNextBlockOfMessages (incomingMidi, bufferToFill.numSamples);
-    keyboardState.processNextMidiBuffer (incomingMidi, bufferToFill.startSample,
-                                         bufferToFill.numSamples, true);
+    // 1) MIDI live (clavier physique + écran), positions 0-based dans le bloc.
+    juce::MidiBuffer liveMidi;
+    midiCollector.removeNextBlockOfMessages (liveMidi, numSamples);
+    keyboardState.processNextMidiBuffer (liveMidi, 0, numSamples, true);
 
-    // 2) Instrument : plugin si chargé, sinon synthé sinus.
-    {
-        const juce::ScopedTryLock stl (pluginLock);
-        if (stl.isLocked())
-        {
-            if (plugin != nullptr)
-            {
-                juce::AudioBuffer<float> proxy (bufferToFill.buffer->getArrayOfWritePointers(),
-                                                bufferToFill.buffer->getNumChannels(),
-                                                bufferToFill.startSample,
-                                                bufferToFill.numSamples);
-                plugin->processBlock (proxy, incomingMidi);
-            }
-            else
-            {
-                synth.renderNextBlock (*bufferToFill.buffer, incomingMidi,
-                                       bufferToFill.startSample, bufferToFill.numSamples);
-            }
-        }
-    }
-
-    // 3) Transport : on synchronise depuis l'UI, on gère les fronts lecture/arrêt.
+    // 2) Transport : tempo + fronts lecture/arrêt.
     transport.setTempo (requestedBpm.load());
-
     const bool wantPlay = requestedPlaying.load();
     if (wantPlay && ! prevPlaying)
     {
@@ -88,23 +70,154 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         beatCounter = 0;
         nextBeatPos = 0.0;
         metronome.reset();
+        if (loopState == LoopState::Armed)
+            loopState = LoopState::Recording; // enregistre dès le premier temps
     }
     else if (! wantPlay && prevPlaying)
     {
         transport.stop();
         transport.rewind();
         metronome.reset();
+        if (loopState == LoopState::Recording)
+            loopState = LoopState::Playing;
+        allNotesOffPending = true;
     }
     prevPlaying = wantPlay;
 
-    // 4) Métronome : on place les clics à l'échantillon près, et on les mixe.
-    const bool   playing = transport.isPlaying();
-    const bool   metroOn = metronomeEnabled.load();
-    const double startPos = transport.getPositionSamples();
-    const double spb       = transport.samplesPerBeat();
-    const int    numCh     = bufferToFill.buffer->getNumChannels();
+    // 3) Commandes boucle (depuis l'UI).
+    if (clearPressed.exchange (false))
+    {
+        clip.clear();
+        loopState = LoopState::Empty;
+        allNotesOffPending = true;
+    }
+    if (recordPressed.exchange (false))
+    {
+        switch (loopState)
+        {
+            case LoopState::Recording: loopState = LoopState::Playing; break;
+            case LoopState::Armed:     loopState = clip.isEmpty() ? LoopState::Empty
+                                                                  : LoopState::Playing; break;
+            default: // Empty / Playing -> on (ré)arme une nouvelle prise
+                clip.clear();
+                clip.setLengthBeats ((double) (requestedBars.load() * numerator));
+                loopState = LoopState::Armed;
+                if (! requestedPlaying.load())
+                    { /* en attente : démarrera au lancement de la lecture */ }
+                break;
+        }
+    }
 
-    for (int i = 0; i < bufferToFill.numSamples; ++i)
+    // 4) Géométrie temporelle du bloc.
+    const double spb        = transport.samplesPerBeat();
+    const double deltaBeats = spb > 0.0 ? (double) numSamples / spb : 0.0;
+    const double L          = clip.getLengthBeats();
+    const double linStart   = transport.getPositionInBeats();
+    const double linEnd      = linStart + deltaBeats;
+
+    // Détection de frontière de boucle (changement de "loop index").
+    if (transport.isPlaying() && L > 0.0)
+    {
+        const long idxStart = (long) std::floor (linStart / L);
+        const long idxEnd   = (long) std::floor (linEnd   / L);
+        if (idxEnd > idxStart)
+        {
+            if (loopState == LoopState::Armed)          loopState = LoopState::Recording;
+            else if (loopState == LoopState::Recording) loopState = LoopState::Playing;
+        }
+    }
+
+    // 5) Enregistrement des événements live (si Recording).
+    if (loopState == LoopState::Recording && L > 0.0 && spb > 0.0)
+    {
+        const double loopLocalStart = std::fmod (linStart, L);
+        for (const auto metadata : liveMidi)
+        {
+            const auto msg   = metadata.getMessage();
+            const auto* raw  = msg.getRawData();
+            const int   n    = juce::jmin (3, msg.getRawDataSize());
+            if (n <= 0 || raw[0] >= 0xF0) // on ignore les messages système/temps réel
+                continue;
+
+            const double evBeat = std::fmod (loopLocalStart
+                                             + (double) metadata.samplePosition / spb, L);
+
+            std::uint8_t bytes[3] = { 0, 0, 0 };
+            for (int i = 0; i < n; ++i)
+                bytes[i] = (std::uint8_t) raw[i];
+
+            clip.addEvent (evBeat, bytes, n);
+        }
+    }
+
+    // 6) MIDI combiné = live + lecture de la boucle.
+    juce::MidiBuffer combined;
+    combined.addEvents (liveMidi, 0, numSamples, 0);
+
+    if (loopState == LoopState::Playing && ! clip.isEmpty() && L > 0.0 && spb > 0.0)
+    {
+        const double loopLocalStart = std::fmod (linStart, L);
+        const double to             = loopLocalStart + deltaBeats;
+
+        auto emit = [&] (const med::ClipEvent& e, double offsetBeats)
+        {
+            if (e.numBytes <= 0)
+                return;
+            int off = (int) (offsetBeats * spb + 0.5);
+            if (off < 0)            off = 0;
+            if (off >= numSamples)  off = numSamples - 1;
+            combined.addEvent (juce::MidiMessage (e.bytes, e.numBytes), off);
+        };
+
+        if (to <= L)
+        {
+            clip.forEachInWindow (loopLocalStart, to, emit);
+        }
+        else
+        {
+            clip.forEachInWindow (loopLocalStart, L, emit);
+            const double rem  = to - L;
+            const double base = L - loopLocalStart;
+            clip.forEachInWindow (0.0, rem, [&] (const med::ClipEvent& e, double off)
+            {
+                emit (e, base + off);
+            });
+        }
+    }
+
+    if (allNotesOffPending)
+    {
+        for (int ch = 1; ch <= 16; ++ch)
+            combined.addEvent (juce::MidiMessage::allNotesOff (ch), 0);
+        allNotesOffPending = false;
+    }
+
+    // 7) Instrument (plugin ou synthé) avec le MIDI combiné.
+    {
+        const juce::ScopedTryLock stl (pluginLock);
+        if (stl.isLocked())
+        {
+            if (plugin != nullptr)
+            {
+                juce::AudioBuffer<float> proxy (bufferToFill.buffer->getArrayOfWritePointers(),
+                                                bufferToFill.buffer->getNumChannels(),
+                                                startSample, numSamples);
+                plugin->processBlock (proxy, combined);
+            }
+            else
+            {
+                synth.renderNextBlock (*bufferToFill.buffer, combined, startSample, numSamples);
+            }
+        }
+    }
+
+    // 8) Métronome (per-sample, grille incrémentale).
+    const bool   playing  = transport.isPlaying();
+    const bool   metroOn  = metronomeEnabled.load();
+    const double startPos = transport.getPositionSamples();
+    const int    numCh    = bufferToFill.buffer->getNumChannels();
+
+    for (int i = 0; i < numSamples; ++i)
     {
         if (playing)
         {
@@ -116,19 +229,20 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
                     metronome.trigger (downbeat);
 
                 ++beatCounter;
-                nextBeatPos += spb; // incrémental : un changement de tempo
-                                    // n'affecte que l'espacement à venir
+                nextBeatPos += spb;
             }
         }
 
         const float click = metroOn ? metronome.nextSample() : 0.0f;
         if (click != 0.0f)
             for (int ch = 0; ch < numCh; ++ch)
-                bufferToFill.buffer->addSample (ch, bufferToFill.startSample + i, click);
+                bufferToFill.buffer->addSample (ch, startSample + i, click);
     }
 
-    transport.advance (bufferToFill.numSamples);
+    // 9) Avance + publication vers l'UI.
+    transport.advance (numSamples);
     publishedBeats.store (transport.getPositionInBeats());
+    publishedLoopState.store ((int) loopState);
 }
 
 //==============================================================================
@@ -152,7 +266,7 @@ void AudioEngine::start()
     juce::ignoreUnused (error);
 
     sourcePlayer.setSource (&source);
-    deviceManager.addAudioCallback (&sourcePlayer); // déclenche prepareToPlay()
+    deviceManager.addAudioCallback (&sourcePlayer);
 
     openedMidiInputs.clear();
     for (auto& input : juce::MidiInput::getAvailableDevices())

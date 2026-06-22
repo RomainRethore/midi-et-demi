@@ -42,6 +42,28 @@ MainComponent::MainComponent()
     addAndMakeVisible (positionLabel);
     positionLabel.setJustificationType (juce::Justification::centred);
 
+    // --- boucle ---
+    addAndMakeVisible (barsLabel);
+    barsLabel.setJustificationType (juce::Justification::centredRight);
+
+    addAndMakeVisible (barsCombo);
+    barsCombo.addItem ("1", 1);
+    barsCombo.addItem ("2", 2);
+    barsCombo.addItem ("4", 4);
+    barsCombo.addItem ("8", 8);
+    barsCombo.setSelectedId (4, juce::dontSendNotification);
+    barsCombo.onChange = [this] { engine.setLoopBars (barsCombo.getSelectedId()); };
+    engine.setLoopBars (barsCombo.getSelectedId());
+
+    addAndMakeVisible (recordButton);
+    recordButton.onClick = [this] { engine.pressRecord(); };
+
+    addAndMakeVisible (clearButton);
+    clearButton.onClick = [this] { engine.pressClear(); };
+
+    addAndMakeVisible (loopStateLabel);
+    loopStateLabel.setJustificationType (juce::Justification::centredLeft);
+
     // --- plugin ---
     addAndMakeVisible (loadButton);
     loadButton.onClick = [this] { openPluginFile(); };
@@ -52,9 +74,9 @@ MainComponent::MainComponent()
     addAndMakeVisible (keyboard);
 
     engine.start();
-    startTimerHz (15); // rafraîchit statut + position
+    startTimerHz (15); // rafraîchit statut + position + état boucle
 
-    setSize (820, 460);
+    setSize (840, 520);
 }
 
 MainComponent::~MainComponent()
@@ -85,6 +107,14 @@ void MainComponent::resized()
     positionLabel  .setBounds (transportRow.reduced (2));
     area.removeFromTop (8);
 
+    auto loopRow = area.removeFromTop (40);
+    barsLabel     .setBounds (loopRow.removeFromLeft (70).reduced (2));
+    barsCombo     .setBounds (loopRow.removeFromLeft (70).reduced (2));
+    recordButton  .setBounds (loopRow.removeFromLeft (150).reduced (2));
+    clearButton   .setBounds (loopRow.removeFromLeft (110).reduced (2));
+    loopStateLabel.setBounds (loopRow.reduced (2));
+    area.removeFromTop (8);
+
     auto pluginRow = area.removeFromTop (40);
     loadButton  .setBounds (pluginRow.removeFromLeft (200).reduced (2));
     editorButton.setBounds (pluginRow.removeFromLeft (200).reduced (2));
@@ -105,6 +135,34 @@ void MainComponent::timerCallback()
                                         + " - Temps " + juce::String (beatInBar))
                                      : juce::String ("Arrete"),
                            juce::dontSendNotification);
+
+    // --- état de la boucle ---
+    switch (engine.getLoopState())
+    {
+        case 0: // Empty
+            loopStateLabel.setText ("Boucle : vide", juce::dontSendNotification);
+            recordButton.setButtonText ("Enregistrer");
+            recordButton.setColour (juce::TextButton::buttonColourId,
+                                    getLookAndFeel().findColour (juce::TextButton::buttonColourId));
+            break;
+        case 1: // Armed
+            loopStateLabel.setText ("Boucle : armee (attente du 1er temps)", juce::dontSendNotification);
+            recordButton.setButtonText ("Armee...");
+            recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::orange);
+            break;
+        case 2: // Recording
+            loopStateLabel.setText ("Boucle : ENREGISTREMENT", juce::dontSendNotification);
+            recordButton.setButtonText ("● REC");
+            recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::red);
+            break;
+        case 3: // Playing
+            loopStateLabel.setText ("Boucle : lecture", juce::dontSendNotification);
+            recordButton.setButtonText ("Re-enregistrer");
+            recordButton.setColour (juce::TextButton::buttonColourId,
+                                    getLookAndFeel().findColour (juce::TextButton::buttonColourId));
+            break;
+        default: break;
+    }
 }
 
 void MainComponent::togglePlay()

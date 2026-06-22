@@ -50,5 +50,9 @@ enable_testing()
 add_executable(transport_tests tests/transport_tests.cpp)
 target_include_directories(transport_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(transport_tests PRIVATE cxx_std_17)
-
 add_test(NAME transport_tests COMMAND transport_tests)
+
+add_executable(loopclip_tests tests/loopclip_tests.cpp)
+target_include_directories(loopclip_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(loopclip_tests PRIVATE cxx_std_17)
+add_test(NAME loopclip_tests COMMAND loopclip_tests)
