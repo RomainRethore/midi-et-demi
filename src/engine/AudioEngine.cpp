@@ -119,6 +119,11 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                     if (msg.isController())
                         requestedBpm.store (40.0 + (ccValue / 127.0) * 200.0);
                 }
+                else if (slot >= 11 && slot < 11 + numTracks) // Volume piste N — continu
+                {
+                    if (msg.isController())
+                        tracks[(size_t) (slot - 11)].setVolume ((float) ccValue / 127.0f);
+                }
                 else if (activation)
                 {
                     switch (slot)

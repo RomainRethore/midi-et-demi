@@ -106,7 +106,7 @@ private:
         juce::TextButton clear;
     };
 
-    static constexpr int numSlots = 11;
+    static constexpr int numSlots = 19;
 
     AudioEngine& engine;
     juce::Label  header;
@@ -117,7 +117,9 @@ private:
         "Lecture / Stop", "Enregistrer", "Effacer", "Annuler passe", "Metronome",
         "Volume (piste active)", "Selecteur de piste (potard)",
         "Piste suivante", "Piste precedente",
-        "Mesures (piste active)", "BPM (tempo)"
+        "Mesures (piste active)", "BPM (tempo)",
+        "Volume piste 1", "Volume piste 2", "Volume piste 3", "Volume piste 4",
+        "Volume piste 5", "Volume piste 6", "Volume piste 7", "Volume piste 8"
     };
 };
 
