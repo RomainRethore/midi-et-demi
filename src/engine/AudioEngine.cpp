@@ -50,6 +50,8 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         beatCounter = 0;
         nextBeatPos = 0.0;
         metronome.reset();
+        for (auto& track : tracks)        // coupe tout son en cours avant le saut
+            track.requestAllNotesOff();
     }
     else if (! wantPlay && prevPlaying)
     {
@@ -82,6 +84,8 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
             beatCounter = 0;
             nextBeatPos = 0.0;
             metronome.reset();
+            for (auto& track : tracks)        // coupe tout son en cours avant le saut
+                track.requestAllNotesOff();
             at.startRecording ((double) (at.getBars() * numerator));
         }
     }

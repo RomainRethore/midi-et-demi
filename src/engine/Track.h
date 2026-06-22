@@ -31,6 +31,9 @@ public:
     void clearLoop();
     void onTransportStopped();
 
+    /** Coupe les notes en cours au prochain bloc (ex. avant un réalignement). */
+    void requestAllNotesOff() noexcept { allNotesOffPending = true; }
+
     /** Rend un bloc dans le buffer interne (0-based, numSamples). */
     void renderBlock (const juce::MidiBuffer& liveMidi,
                       double linStart, double deltaBeats, double spb,
