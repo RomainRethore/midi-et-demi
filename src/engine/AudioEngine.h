@@ -47,6 +47,10 @@ public:
     void clearBinding (int slot) noexcept { clearBindingSlot.store (slot); }
     int  getBindingCode (int slot) const noexcept { return publishedSig[(size_t) slot].load(); }
 
+    // moniteur : dernier contrôle reçu (code : -1 aucun, >=1000 CC, sinon Note)
+    int  getLastMidiCode() const noexcept  { return lastMidiCode.load(); }
+    int  getLastMidiValue() const noexcept { return lastMidiValue.load(); }
+
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
@@ -84,6 +88,8 @@ private:
     std::atomic<int>    learnArmedSlot   { -1 };
     std::atomic<int>    clearBindingSlot { -1 };
     std::array<std::atomic<int>, med::MidiMap::numSlots> publishedSig;
+    std::atomic<int>    lastMidiCode     { -1 };
+    std::atomic<int>    lastMidiValue    { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
@@ -131,6 +137,8 @@ public:
     int  getLearnSlot() const noexcept        { return source.getLearnSlot(); }
     void clearBinding (int slot) noexcept     { source.clearBinding (slot); }
     int  getBindingCode (int slot) const noexcept { return source.getBindingCode (slot); }
+    int  getLastMidiCode() const noexcept     { return source.getLastMidiCode(); }
+    int  getLastMidiValue() const noexcept    { return source.getLastMidiValue(); }
 
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }

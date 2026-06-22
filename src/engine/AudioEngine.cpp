@@ -65,6 +65,18 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
             activation = ccValue >= 64;
         }
 
+        // Moniteur : on publie le dernier contrôle reçu (note-on / CC).
+        if (msg.isNoteOn())
+        {
+            lastMidiCode.store (msg.getNoteNumber());
+            lastMidiValue.store ((int) msg.getVelocity());
+        }
+        else if (msg.isController())
+        {
+            lastMidiCode.store (1000 + msg.getControllerNumber());
+            lastMidiValue.store (ccValue);
+        }
+
         bool consumed = false;
         if (mappable)
         {

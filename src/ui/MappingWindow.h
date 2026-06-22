@@ -15,9 +15,14 @@ public:
     explicit MappingContent (AudioEngine& e) : engine (e)
     {
         addAndMakeVisible (header);
-        header.setText ("Clique \"Apprendre\" puis bouge un pad / potard / bouton de l'Oxygen.",
+        header.setText ("Clique \"Apprendre\" puis bouge un potard / bouton (CC) de l'Oxygen.",
                         juce::dontSendNotification);
         header.setJustificationType (juce::Justification::centredLeft);
+
+        addAndMakeVisible (monitor);
+        monitor.setJustificationType (juce::Justification::centredLeft);
+        monitor.setColour (juce::Label::backgroundColourId, juce::Colour (0xff20232c));
+        monitor.setColour (juce::Label::textColourId, juce::Colours::yellow);
 
         for (int s = 0; s < numSlots; ++s)
         {
@@ -43,8 +48,8 @@ public:
             row.clear.onClick = [this, s] { engine.clearBinding (s); };
         }
 
-        setSize (500, 60 + numSlots * 30);
-        startTimerHz (10);
+        setSize (500, 76 + numSlots * 30);
+        startTimerHz (15);
     }
 
     ~MappingContent() override { stopTimer(); }
@@ -52,7 +57,9 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced (10);
-        header.setBounds (area.removeFromTop (36));
+        header.setBounds (area.removeFromTop (32));
+        monitor.setBounds (area.removeFromTop (26));
+        area.removeFromTop (4);
 
         for (int s = 0; s < numSlots; ++s)
         {
@@ -68,6 +75,16 @@ public:
 private:
     void timerCallback() override
     {
+        // moniteur : dernier contrôle reçu
+        const int code = engine.getLastMidiCode();
+        const int val  = engine.getLastMidiValue();
+        monitor.setText (code < 0   ? juce::String ("Dernier recu : -")
+                       : code >= 1000 ? "Dernier recu : CC " + juce::String (code - 1000)
+                                        + " = " + juce::String (val)
+                                      : "Dernier recu : Note " + juce::String (code)
+                                        + " (vel " + juce::String (val) + ")",
+                         juce::dontSendNotification);
+
         const int learning = engine.getLearnSlot();
 
         for (int s = 0; s < numSlots; ++s)
@@ -93,6 +110,7 @@ private:
 
     AudioEngine& engine;
     juce::Label  header;
+    juce::Label  monitor;
     std::array<Row, numSlots> rows;
 
     const std::array<const char*, numSlots> slotNames {
