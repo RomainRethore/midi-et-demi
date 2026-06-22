@@ -205,8 +205,8 @@ void MainComponent::timerCallback()
 
     if (state == 2) // Recording
     {
-        recordButton.setButtonText ("\xe2\x97\x8f REC");
-        recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::red);
+        recordButton.setButtonText ("Stop REC");
+        recordButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffc62828));
     }
     else
     {
