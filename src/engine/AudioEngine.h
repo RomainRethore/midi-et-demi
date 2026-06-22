@@ -2,33 +2,49 @@
 
 #include <JuceHeader.h>
 #include "engine/SineSynth.h"
+#include "engine/PluginHost.h"
 
 /**
-    Source audio qui rend le synthé à partir du MIDI entrant (clavier physique
-    + clavier à l'écran). C'est elle qui est appelée par le fil audio temps réel.
+    Source audio appelée par le fil temps réel. Joue le plugin instrument s'il
+    est chargé, sinon le synthé sinus de secours. Le plugin est protégé par un
+    verrou : on le pose côté fil message, et le fil audio n'utilise qu'un
+    try-lock (jamais d'attente bloquante => pas de coupure de son).
 */
-class SynthAudioSource : public juce::AudioSource
+class InstrumentSource : public juce::AudioSource
 {
 public:
-    explicit SynthAudioSource (juce::MidiKeyboardState& keyStateToUse);
+    explicit InstrumentSource (juce::MidiKeyboardState& keyStateToUse);
 
     /** File thread-safe par laquelle on injecte le MIDI du clavier physique. */
     juce::MidiMessageCollector* getMidiCollector() noexcept { return &midiCollector; }
+
+    /** Remplace l'instrument courant (appelé depuis le fil message). */
+    void setPlugin (std::unique_ptr<juce::AudioPluginInstance> newPlugin);
+
+    /** Pointeur sur le plugin courant (pour créer son éditeur). Peut être nul. */
+    juce::AudioPluginInstance* getPlugin() const noexcept { return plugin.get(); }
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 
 private:
-    juce::MidiKeyboardState&  keyboardState;
-    juce::Synthesiser         synth;
+    juce::MidiKeyboardState&   keyboardState;
+    juce::Synthesiser          synth;
     juce::MidiMessageCollector midiCollector;
+
+    juce::CriticalSection      pluginLock;
+    std::unique_ptr<juce::AudioPluginInstance> plugin;
+
+    double currentSampleRate = 44100.0;
+    int    currentBlockSize  = 512;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InstrumentSource)
 };
 
 /**
-    Couche MOTEUR (engine). Possède la carte son, le synthé et l'entrée MIDI.
-    À ce stade (1a), elle ne dépend de rien au-dessus d'elle : ni UI, ni
-    application. Elle sera amenée à exposer des interfaces plus tard.
+    Couche MOTEUR (engine). Possède la carte son, l'instrument (plugin ou synthé)
+    et l'entrée MIDI. Sa façade publique reste simple : start / load / état.
 */
 class AudioEngine : public juce::MidiInputCallback
 {
@@ -42,7 +58,13 @@ public:
     /** État partagé avec le clavier à l'écran (UI). */
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
 
-    /** Texte de statut (périphérique audio, claviers MIDI détectés). */
+    /** Charge un plugin depuis un fichier. Retourne "" si OK, sinon le message d'erreur. */
+    juce::String loadPluginFromFile (const juce::File& file);
+
+    /** Plugin courant (pour ouvrir son éditeur). Peut être nul. */
+    juce::AudioPluginInstance* getLoadedPlugin() const noexcept { return instrument.getPlugin(); }
+
+    juce::String getLoadedPluginName() const;
     juce::String getStatusText();
 
     // --- juce::MidiInputCallback (appelé sur le fil MIDI) ---
@@ -53,7 +75,8 @@ private:
     juce::AudioDeviceManager deviceManager;
     juce::AudioSourcePlayer  sourcePlayer;
     juce::MidiKeyboardState  keyboardState;
-    SynthAudioSource         synthSource { keyboardState };
+    InstrumentSource         instrument { keyboardState };
+    PluginHost               pluginHost;
     juce::StringArray        openedMidiInputs;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)

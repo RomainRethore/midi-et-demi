@@ -1,39 +1,77 @@
 #include "engine/AudioEngine.h"
 
 //==============================================================================
-// SynthAudioSource
+// InstrumentSource
 //==============================================================================
-SynthAudioSource::SynthAudioSource (juce::MidiKeyboardState& keyStateToUse)
+InstrumentSource::InstrumentSource (juce::MidiKeyboardState& keyStateToUse)
     : keyboardState (keyStateToUse)
 {
-    for (int i = 0; i < 8; ++i)        // 8 voix => polyphonie de 8 notes
+    for (int i = 0; i < 8; ++i)        // 8 voix de secours (synthé sinus)
         synth.addVoice (new SineVoice());
 
     synth.addSound (new SineSound());
 }
 
-void SynthAudioSource::prepareToPlay (int /*samplesPerBlockExpected*/, double sampleRate)
+void InstrumentSource::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
+    currentSampleRate = sampleRate;
+    currentBlockSize  = samplesPerBlockExpected;
+
     synth.setCurrentPlaybackSampleRate (sampleRate);
     midiCollector.reset (sampleRate);
+
+    const juce::ScopedLock sl (pluginLock);
+    if (plugin != nullptr)
+    {
+        plugin->setPlayConfigDetails (0, 2, sampleRate, samplesPerBlockExpected);
+        plugin->prepareToPlay (sampleRate, samplesPerBlockExpected);
+    }
 }
 
-void SynthAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
+void InstrumentSource::setPlugin (std::unique_ptr<juce::AudioPluginInstance> newPlugin)
+{
+    // Préparation (lourde, alloue) faite HORS du verrou, sur un plugin pas encore visible.
+    if (newPlugin != nullptr)
+    {
+        newPlugin->setPlayConfigDetails (0, 2, currentSampleRate, currentBlockSize);
+        newPlugin->prepareToPlay (currentSampleRate, currentBlockSize);
+    }
+
+    // Échange court sous verrou ; l'ancien plugin est détruit ici, le fil audio
+    // étant tenu à l'écart par son try-lock pendant ce temps.
+    const juce::ScopedLock sl (pluginLock);
+    plugin = std::move (newPlugin);
+}
+
+void InstrumentSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
     bufferToFill.clearActiveBufferRegion();
 
+    // MIDI : clavier physique (file) + clavier à l'écran (état). Hors verrou.
     juce::MidiBuffer incomingMidi;
-
-    // 1) le MIDI du clavier physique (déposé par handleIncomingMidiMessage)
     midiCollector.removeNextBlockOfMessages (incomingMidi, bufferToFill.numSamples);
-
-    // 2) le MIDI du clavier à l'écran (true => injecte aussi les événements indirects)
     keyboardState.processNextMidiBuffer (incomingMidi, bufferToFill.startSample,
                                          bufferToFill.numSamples, true);
 
-    // 3) on rend les notes
-    synth.renderNextBlock (*bufferToFill.buffer, incomingMidi,
-                           bufferToFill.startSample, bufferToFill.numSamples);
+    const juce::ScopedTryLock stl (pluginLock);
+    if (stl.isLocked())
+    {
+        if (plugin != nullptr)
+        {
+            // Vue sur la sous-région du buffer de sortie pour le plugin.
+            juce::AudioBuffer<float> proxy (bufferToFill.buffer->getArrayOfWritePointers(),
+                                            bufferToFill.buffer->getNumChannels(),
+                                            bufferToFill.startSample,
+                                            bufferToFill.numSamples);
+            plugin->processBlock (proxy, incomingMidi);
+        }
+        else
+        {
+            synth.renderNextBlock (*bufferToFill.buffer, incomingMidi,
+                                   bufferToFill.startSample, bufferToFill.numSamples);
+        }
+    }
+    // Verrou indisponible (changement d'instrument en cours) => silence sur ce bloc.
 }
 
 //==============================================================================
@@ -52,15 +90,13 @@ AudioEngine::~AudioEngine()
 
 void AudioEngine::start()
 {
-    // 0 entrée, 2 sorties (stéréo). Le "true" sélectionne le périphérique par défaut.
     auto error = deviceManager.initialise (0, 2, nullptr, true);
     jassert (error.isEmpty());
     juce::ignoreUnused (error);
 
-    sourcePlayer.setSource (&synthSource);
+    sourcePlayer.setSource (&instrument);
     deviceManager.addAudioCallback (&sourcePlayer); // déclenche prepareToPlay()
 
-    // On connecte TOUS les claviers MIDI présents (dont l'Oxygen Pro Mini).
     openedMidiInputs.clear();
     for (auto& input : juce::MidiInput::getAvailableDevices())
     {
@@ -72,28 +108,60 @@ void AudioEngine::start()
     }
 }
 
+juce::String AudioEngine::loadPluginFromFile (const juce::File& file)
+{
+    double sampleRate = 44100.0;
+    int    blockSize  = 512;
+
+    if (auto* device = deviceManager.getCurrentAudioDevice())
+    {
+        sampleRate = device->getCurrentSampleRate();
+        blockSize  = device->getCurrentBufferSizeSamples();
+    }
+
+    juce::String error;
+    auto instance = pluginHost.createFromFile (file, sampleRate, blockSize, error);
+
+    if (instance == nullptr)
+        return error.isNotEmpty() ? error : juce::String ("Echec du chargement du plugin.");
+
+    instrument.setPlugin (std::move (instance));
+    return {};
+}
+
+juce::String AudioEngine::getLoadedPluginName() const
+{
+    if (auto* p = instrument.getPlugin())
+        return p->getName();
+
+    return {};
+}
+
 juce::String AudioEngine::getStatusText()
 {
     juce::String s;
 
     if (auto* device = deviceManager.getCurrentAudioDevice())
-        s << "Audio : " << device->getName()
+        s << "Audio      : " << device->getName()
           << "  (" << (int) device->getCurrentSampleRate() << " Hz, buffer "
           << device->getCurrentBufferSizeSamples() << " samples)\n";
     else
-        s << "Audio : aucun peripherique\n";
+        s << "Audio      : aucun peripherique\n";
 
     if (openedMidiInputs.isEmpty())
-        s << "MIDI  : aucun clavier detecte";
+        s << "MIDI       : aucun clavier detecte\n";
     else
-        s << "MIDI  : " << openedMidiInputs.joinIntoString (", ");
+        s << "MIDI       : " << openedMidiInputs.joinIntoString (", ") << "\n";
 
+    auto pluginName = getLoadedPluginName();
+    s << "Instrument : " << (pluginName.isNotEmpty()
+                                ? pluginName
+                                : juce::String ("synthe sinus (aucun plugin charge)"));
     return s;
 }
 
 void AudioEngine::handleIncomingMidiMessage (juce::MidiInput* /*source*/,
                                              const juce::MidiMessage& message)
 {
-    // Appelé sur le fil MIDI : on dépose juste le message dans la file lock-free.
-    synthSource.getMidiCollector()->addMessageToQueue (message);
+    instrument.getMidiCollector()->addMessageToQueue (message);
 }

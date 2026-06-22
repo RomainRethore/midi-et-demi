@@ -22,7 +22,8 @@ juce_generate_juce_header(MidiEtDemi)
 target_sources(MidiEtDemi PRIVATE
     src/app/Main.cpp
     src/ui/MainComponent.cpp
-    src/engine/AudioEngine.cpp)
+    src/engine/AudioEngine.cpp
+    src/engine/PluginHost.cpp)
 
 # Permet les inclusions du type  #include "engine/AudioEngine.h"
 target_include_directories(MidiEtDemi PRIVATE
@@ -33,6 +34,8 @@ target_compile_features(MidiEtDemi PRIVATE cxx_std_17)
 target_compile_definitions(MidiEtDemi PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
+    JUCE_PLUGINHOST_VST3=1          # héberger des plugins VST3
+    JUCE_PLUGINHOST_AU=1            # héberger des Audio Units (macOS)
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:MidiEtDemi,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:MidiEtDemi,JUCE_VERSION>")
 

@@ -76,6 +76,16 @@ open "$(find build -name '*.app' -maxdepth 4 | head -1)"
 
 Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. 🎉
 
+### Étape 1b — charger un vrai plugin
+- Clique **« Charger un plugin… »** et choisis un instrument dans
+  `/Library/Audio/Plug-Ins/VST3` (ex. `Vital.vst3`, `Surge XT.vst3`, `Dexed.vst3`).
+- La ligne `Instrument :` du statut doit afficher le nom du plugin.
+- Joue → tu entends **le plugin** (plus le sinus).
+- **« Ouvrir l'editeur »** affiche l'interface du plugin (pour choisir un preset).
+
+> Les `.vst3` / `.component` sont des « paquets » : le sélecteur macOS les
+> présente comme des fichiers cliquables.
+
 ---
 
 ## 6. Si ça coince
