@@ -23,7 +23,8 @@ target_sources(MidiEtDemi PRIVATE
     src/app/Main.cpp
     src/ui/MainComponent.cpp
     src/engine/AudioEngine.cpp
-    src/engine/PluginHost.cpp)
+    src/engine/PluginHost.cpp
+    src/engine/Track.cpp)
 
 # Permet les inclusions du type  #include "engine/AudioEngine.h"
 target_include_directories(MidiEtDemi PRIVATE

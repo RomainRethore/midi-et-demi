@@ -5,8 +5,7 @@
 MainComponent::MainComponent()
 {
     addAndMakeVisible (titleLabel);
-    titleLabel.setText ("Midi et demi - tempo & transport (etape 2)",
-                        juce::dontSendNotification);
+    titleLabel.setText ("Midi et demi - multipiste (etape 4a)", juce::dontSendNotification);
     titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centred);
 
@@ -33,16 +32,32 @@ MainComponent::MainComponent()
 
     addAndMakeVisible (metronomeToggle);
     metronomeToggle.setToggleState (true, juce::dontSendNotification);
-    metronomeToggle.onClick = [this]
-    {
-        engine.setMetronomeEnabled (metronomeToggle.getToggleState());
-    };
+    metronomeToggle.onClick = [this] { engine.setMetronomeEnabled (metronomeToggle.getToggleState()); };
     engine.setMetronomeEnabled (true);
 
     addAndMakeVisible (positionLabel);
     positionLabel.setJustificationType (juce::Justification::centred);
 
-    // --- boucle ---
+    // --- sélecteur de piste ---
+    addAndMakeVisible (tracksLabel);
+    for (int i = 0; i < (int) trackButtons.size(); ++i)
+    {
+        auto& b = trackButtons[(size_t) i];
+        addAndMakeVisible (b);
+        b.setButtonText (juce::String (i + 1));
+        b.setClickingTogglesState (true);
+        b.setRadioGroupId (1000);
+        b.onClick = [this, i] { selectTrack (i); };
+    }
+    trackButtons[0].setToggleState (true, juce::dontSendNotification);
+
+    // --- contrôles de la piste active ---
+    addAndMakeVisible (loadButton);
+    loadButton.onClick = [this] { openPluginFile(); };
+
+    addAndMakeVisible (editorButton);
+    editorButton.onClick = [this] { showPluginEditor(); };
+
     addAndMakeVisible (barsLabel);
     barsLabel.setJustificationType (juce::Justification::centredRight);
 
@@ -51,9 +66,10 @@ MainComponent::MainComponent()
     barsCombo.addItem ("2", 2);
     barsCombo.addItem ("4", 4);
     barsCombo.addItem ("8", 8);
-    barsCombo.setSelectedId (4, juce::dontSendNotification);
-    barsCombo.onChange = [this] { engine.setLoopBars (barsCombo.getSelectedId()); };
-    engine.setLoopBars (barsCombo.getSelectedId());
+    barsCombo.onChange = [this]
+    {
+        engine.setTrackBars (engine.getActiveTrack(), barsCombo.getSelectedId());
+    };
 
     addAndMakeVisible (recordButton);
     recordButton.onClick = [this] { engine.pressRecord(); };
@@ -61,28 +77,40 @@ MainComponent::MainComponent()
     addAndMakeVisible (clearButton);
     clearButton.onClick = [this] { engine.pressClear(); };
 
-    addAndMakeVisible (loopStateLabel);
-    loopStateLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (volumeLabel);
+    volumeLabel.setJustificationType (juce::Justification::centredRight);
 
-    // --- plugin ---
-    addAndMakeVisible (loadButton);
-    loadButton.onClick = [this] { openPluginFile(); };
+    addAndMakeVisible (volumeSlider);
+    volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
+    volumeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 60, 24);
+    volumeSlider.setRange (0.0, 1.0, 0.01);
+    volumeSlider.onValueChange = [this]
+    {
+        engine.setTrackVolume (engine.getActiveTrack(), (float) volumeSlider.getValue());
+    };
 
-    addAndMakeVisible (editorButton);
-    editorButton.onClick = [this] { showPluginEditor(); };
+    addAndMakeVisible (muteToggle);
+    muteToggle.onClick = [this]
+    {
+        engine.setTrackMute (engine.getActiveTrack(), muteToggle.getToggleState());
+    };
+
+    addAndMakeVisible (activeInfoLabel);
+    activeInfoLabel.setJustificationType (juce::Justification::centredLeft);
 
     addAndMakeVisible (keyboard);
 
     engine.start();
-    startTimerHz (15); // rafraîchit statut + position + état boucle
+    selectTrack (0);
+    startTimerHz (15);
 
-    setSize (840, 520);
+    setSize (900, 560);
 }
 
 MainComponent::~MainComponent()
 {
     stopTimer();
-    pluginWindow = nullptr; // ferme l'éditeur avant que l'engine ne disparaisse
+    pluginWindow = nullptr;
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -94,32 +122,56 @@ void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (12);
 
-    titleLabel.setBounds (area.removeFromTop (32));
-    statusLabel.setBounds (area.removeFromTop (72));
-    area.removeFromTop (8);
+    titleLabel.setBounds (area.removeFromTop (30));
+    statusLabel.setBounds (area.removeFromTop (44));
+    area.removeFromTop (6);
 
-    auto transportRow = area.removeFromTop (40);
-    playButton     .setBounds (transportRow.removeFromLeft (100).reduced (2));
-    bpmLabel       .setBounds (transportRow.removeFromLeft (55).reduced (2));
+    auto transportRow = area.removeFromTop (38);
+    playButton     .setBounds (transportRow.removeFromLeft (90).reduced (2));
+    bpmLabel       .setBounds (transportRow.removeFromLeft (50).reduced (2));
     bpmSlider      .setBounds (transportRow.removeFromLeft (240).reduced (2));
-    bpmUnitLabel   .setBounds (transportRow.removeFromLeft (45).reduced (2));
+    bpmUnitLabel   .setBounds (transportRow.removeFromLeft (40).reduced (2));
     metronomeToggle.setBounds (transportRow.removeFromLeft (120).reduced (2));
     positionLabel  .setBounds (transportRow.reduced (2));
     area.removeFromTop (8);
 
-    auto loopRow = area.removeFromTop (40);
-    barsLabel     .setBounds (loopRow.removeFromLeft (70).reduced (2));
-    barsCombo     .setBounds (loopRow.removeFromLeft (70).reduced (2));
-    recordButton  .setBounds (loopRow.removeFromLeft (150).reduced (2));
-    clearButton   .setBounds (loopRow.removeFromLeft (110).reduced (2));
-    loopStateLabel.setBounds (loopRow.reduced (2));
+    auto trackRow = area.removeFromTop (36);
+    tracksLabel.setBounds (trackRow.removeFromLeft (90).reduced (2));
+    for (auto& b : trackButtons)
+        b.setBounds (trackRow.removeFromLeft (42).reduced (2));
     area.removeFromTop (8);
 
-    auto pluginRow = area.removeFromTop (40);
-    loadButton  .setBounds (pluginRow.removeFromLeft (200).reduced (2));
-    editorButton.setBounds (pluginRow.removeFromLeft (200).reduced (2));
+    auto activeRow1 = area.removeFromTop (38);
+    loadButton  .setBounds (activeRow1.removeFromLeft (180).reduced (2));
+    editorButton.setBounds (activeRow1.removeFromLeft (90).reduced (2));
+    barsLabel   .setBounds (activeRow1.removeFromLeft (70).reduced (2));
+    barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
+    recordButton.setBounds (activeRow1.removeFromLeft (140).reduced (2));
+    clearButton .setBounds (activeRow1.removeFromLeft (100).reduced (2));
+    area.removeFromTop (6);
 
-    keyboard.setBounds (area.removeFromBottom (140));
+    auto activeRow2 = area.removeFromTop (38);
+    volumeLabel .setBounds (activeRow2.removeFromLeft (70).reduced (2));
+    volumeSlider.setBounds (activeRow2.removeFromLeft (240).reduced (2));
+    muteToggle  .setBounds (activeRow2.removeFromLeft (90).reduced (2));
+    activeInfoLabel.setBounds (activeRow2.reduced (2));
+
+    keyboard.setBounds (area.removeFromBottom (120));
+}
+
+void MainComponent::selectTrack (int index)
+{
+    engine.setActiveTrack (index);
+    trackButtons[(size_t) index].setToggleState (true, juce::dontSendNotification);
+    refreshActiveControls();
+}
+
+void MainComponent::refreshActiveControls()
+{
+    const int active = engine.getActiveTrack();
+    barsCombo.setSelectedId (engine.getTrackBars (active), juce::dontSendNotification);
+    volumeSlider.setValue (engine.getTrackVolume (active), juce::dontSendNotification);
+    muteToggle.setToggleState (engine.isTrackMuted (active), juce::dontSendNotification);
 }
 
 void MainComponent::timerCallback()
@@ -138,32 +190,43 @@ void MainComponent::timerCallback()
                                    : juce::String ("Arrete"),
                            juce::dontSendNotification);
 
-    // --- état de la boucle ---
-    switch (engine.getLoopState())
+    const int    active     = engine.getActiveTrack();
+    const int    state      = engine.getTrackLoopState (active);
+    const juce::String name = engine.getTrackPluginName (active);
+
+    juce::String stateText;
+    switch (state)
     {
-        case 0: // Empty
-            loopStateLabel.setText ("Boucle : vide", juce::dontSendNotification);
-            recordButton.setButtonText ("Enregistrer");
-            recordButton.setColour (juce::TextButton::buttonColourId,
-                                    getLookAndFeel().findColour (juce::TextButton::buttonColourId));
-            break;
-        case 1: // Armed
-            loopStateLabel.setText ("Boucle : armee (attente du 1er temps)", juce::dontSendNotification);
-            recordButton.setButtonText ("Armee...");
-            recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::orange);
-            break;
-        case 2: // Recording
-            loopStateLabel.setText ("Boucle : ENREGISTREMENT", juce::dontSendNotification);
-            recordButton.setButtonText ("● REC");
-            recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::red);
-            break;
-        case 3: // Playing
-            loopStateLabel.setText ("Boucle : lecture", juce::dontSendNotification);
-            recordButton.setButtonText ("Re-enregistrer");
-            recordButton.setColour (juce::TextButton::buttonColourId,
-                                    getLookAndFeel().findColour (juce::TextButton::buttonColourId));
-            break;
-        default: break;
+        case 2:  stateText = "ENREGISTREMENT"; break;
+        case 3:  stateText = "lecture";        break;
+        default: stateText = "vide";           break;
+    }
+
+    activeInfoLabel.setText ("Piste " + juce::String (active + 1) + " - "
+                             + (name.isNotEmpty() ? name : juce::String ("synthe sinus"))
+                             + " - " + stateText,
+                             juce::dontSendNotification);
+
+    if (state == 2) // Recording
+    {
+        recordButton.setButtonText ("\xe2\x97\x8f REC");
+        recordButton.setColour (juce::TextButton::buttonColourId, juce::Colours::red);
+    }
+    else
+    {
+        recordButton.setButtonText (state == 3 ? "Re-enregistrer" : "Enregistrer");
+        recordButton.setColour (juce::TextButton::buttonColourId,
+                                getLookAndFeel().findColour (juce::TextButton::buttonColourId));
+    }
+
+    // Couleur des pistes ayant une boucle.
+    for (int i = 0; i < (int) trackButtons.size(); ++i)
+    {
+        const int st = engine.getTrackLoopState (i);
+        auto colour = (st == 3) ? juce::Colours::green
+                    : (st == 2) ? juce::Colours::red
+                                : getLookAndFeel().findColour (juce::TextButton::buttonColourId);
+        trackButtons[(size_t) i].setColour (juce::TextButton::buttonColourId, colour);
     }
 }
 
@@ -187,9 +250,9 @@ void MainComponent::openPluginFile()
         if (file == juce::File{})
             return;
 
-        pluginWindow = nullptr; // ferme l'ancien éditeur avant de changer d'instrument
+        pluginWindow = nullptr;
 
-        auto error = engine.loadPluginFromFile (file);
+        auto error = engine.loadPluginToActiveTrack (file);
         if (error.isNotEmpty())
             statusLabel.setText ("Erreur : " + error, juce::dontSendNotification);
     });
@@ -197,10 +260,10 @@ void MainComponent::openPluginFile()
 
 void MainComponent::showPluginEditor()
 {
-    auto* plugin = engine.getLoadedPlugin();
+    auto* plugin = engine.getActivePlugin();
     if (plugin == nullptr)
     {
-        statusLabel.setText ("Charge d'abord un plugin.", juce::dontSendNotification);
+        statusLabel.setText ("Charge d'abord un plugin sur cette piste.", juce::dontSendNotification);
         return;
     }
 

@@ -2,67 +2,52 @@
 
 #include <JuceHeader.h>
 #include <atomic>
+#include <array>
 #include "domain/Transport.h"
-#include "domain/LoopClip.h"
-#include "engine/SineSynth.h"
 #include "engine/Metronome.h"
 #include "engine/PluginHost.h"
+#include "engine/Track.h"
 
 /**
-    Source audio (fil temps réel). Elle :
-      - rend l'instrument (plugin chargé, sinon synthé sinus),
-      - fait avancer l'horloge (Transport) et place les clics du métronome,
-      - enregistre une boucle MIDI puis la rejoue en boucle (étape 3).
-
-    États de la boucle : Vide -> Armee -> Enregistrement -> Lecture.
-    Les contrôles UI passent par des atomiques ; la boucle (LoopClip) n'est
-    touchée que par le fil audio.
+    Source audio (fil temps réel) : 8 pistes indépendantes, une horloge et un
+    métronome partagés. Le MIDI live (clavier physique + écran) va à la piste
+    ACTIVE ; chaque piste rend son instrument + sa boucle, puis on mixe le tout.
 */
 class EngineAudioSource : public juce::AudioSource
 {
 public:
-    enum class LoopState { Empty = 0, Armed = 1, Recording = 2, Playing = 3 };
+    static constexpr int numTracks = 8;
 
     explicit EngineAudioSource (juce::MidiKeyboardState& keyStateToUse);
 
     juce::MidiMessageCollector* getMidiCollector() noexcept { return &midiCollector; }
 
-    void setPlugin (std::unique_ptr<juce::AudioPluginInstance> newPlugin);
-    juce::AudioPluginInstance* getPlugin() const noexcept { return plugin.get(); }
+    Track& getTrack (int index) noexcept { return tracks[(size_t) index]; }
 
     // --- transport ---
-    void setTempo (double bpm) noexcept        { requestedBpm.store (bpm); }
+    void setTempo (double bpm) noexcept         { requestedBpm.store (bpm); }
     void setPlaying (bool shouldPlay) noexcept  { requestedPlaying.store (shouldPlay); }
     void setMetronomeEnabled (bool on) noexcept { metronomeEnabled.store (on); }
     double getPositionInBeats() const noexcept  { return publishedBeats.load(); }
     bool   isPlaying() const noexcept           { return publishedPlaying.load(); }
     int    getNumerator() const noexcept        { return numerator; }
 
-    // --- boucle ---
-    void setLoopBars (int bars) noexcept { requestedBars.store (bars); }
-    void pressRecord() noexcept          { recordPressed.store (true); }
-    void pressClear() noexcept           { clearPressed.store (true); }
-    int  getLoopState() const noexcept   { return publishedLoopState.load(); }
+    // --- pistes / boucle ---
+    void setActiveTrack (int index) noexcept { activeTrack.store (index); }
+    int  getActiveTrack() const noexcept     { return activeTrack.load(); }
+    void pressRecord() noexcept              { recordPressed.store (true); }
+    void pressClear() noexcept               { clearPressed.store (true); }
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 
 private:
-    /** Termine une prise : écrit les note-off des notes encore tenues. */
-    void finishRecording();
-
     juce::MidiKeyboardState&   keyboardState;
-    juce::Synthesiser          synth;
     juce::MidiMessageCollector midiCollector;
 
-    juce::CriticalSection      pluginLock;
-    std::unique_ptr<juce::AudioPluginInstance> plugin;
+    std::array<Track, numTracks> tracks;
 
-    double currentSampleRate = 44100.0;
-    int    currentBlockSize  = 512;
-
-    // --- horloge + métronome (état détenu par le fil audio) ---
     med::Transport transport;
     med::Metronome metronome;
     static constexpr int numerator = 4; // signature 4/4 fixe pour l'instant
@@ -70,30 +55,22 @@ private:
     long   beatCounter = 0;
     double nextBeatPos = 0.0;
 
-    // --- boucle (état détenu par le fil audio) ---
-    med::LoopClip clip;
-    LoopState     loopState = LoopState::Empty;
-    bool          allNotesOffPending = false;
-    bool          heldNotes[16][128] = {}; // notes tenues pendant l'enregistrement
-
-    // --- échanges avec l'UI ---
     std::atomic<double> requestedBpm      { 120.0 };
     std::atomic<bool>   requestedPlaying  { false };
     std::atomic<bool>   metronomeEnabled  { true };
     std::atomic<double> publishedBeats     { 0.0 };
     std::atomic<bool>   publishedPlaying   { false };
-
-    std::atomic<int>    requestedBars      { 4 };
+    std::atomic<int>    activeTrack        { 0 };
     std::atomic<bool>   recordPressed      { false };
     std::atomic<bool>   clearPressed       { false };
-    std::atomic<int>    publishedLoopState { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
 
 /**
-    Couche MOTEUR (engine). Façade simple pour l'UI : carte son, instrument,
-    entrée MIDI, transport et boucle.
+    Couche MOTEUR (engine). Façade simple pour l'UI : carte son, pistes,
+    entrée MIDI, transport. Les opérations « plugin / enregistrer / effacer »
+    s'appliquent à la piste ACTIVE.
 */
 class AudioEngine : public juce::MidiInputCallback
 {
@@ -105,9 +82,9 @@ public:
 
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
 
-    juce::String loadPluginFromFile (const juce::File& file);
-    juce::AudioPluginInstance* getLoadedPlugin() const noexcept { return source.getPlugin(); }
-    juce::String getLoadedPluginName() const;
+    /** Charge un plugin dans la piste active. "" si OK, sinon message d'erreur. */
+    juce::String loadPluginToActiveTrack (const juce::File& file);
+    juce::AudioPluginInstance* getActivePlugin() noexcept;
     juce::String getStatusText();
 
     // --- transport ---
@@ -118,11 +95,21 @@ public:
     bool   isPlaying() const noexcept             { return source.isPlaying(); }
     int    getNumerator() const noexcept          { return source.getNumerator(); }
 
-    // --- boucle ---
-    void setLoopBars (int bars) noexcept { source.setLoopBars (bars); }
-    void pressRecord() noexcept          { source.pressRecord(); }
-    void pressClear() noexcept           { source.pressClear(); }
-    int  getLoopState() const noexcept   { return source.getLoopState(); }
+    // --- pistes ---
+    int  numTracks() const noexcept          { return EngineAudioSource::numTracks; }
+    void setActiveTrack (int i) noexcept      { source.setActiveTrack (i); }
+    int  getActiveTrack() const noexcept      { return source.getActiveTrack(); }
+    void pressRecord() noexcept               { source.pressRecord(); }
+    void pressClear() noexcept                { source.pressClear(); }
+
+    void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
+    float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }
+    void   setTrackMute (int i, bool m) noexcept    { source.getTrack (i).setMute (m); }
+    bool   isTrackMuted (int i) noexcept            { return source.getTrack (i).isMuted(); }
+    void   setTrackBars (int i, int b) noexcept     { source.getTrack (i).setBars (b); }
+    int    getTrackBars (int i) noexcept            { return source.getTrack (i).getBars(); }
+    int    getTrackLoopState (int i) noexcept       { return source.getTrack (i).getLoopState(); }
+    juce::String getTrackPluginName (int i)         { return source.getTrack (i).getPluginName(); }
 
     void handleIncomingMidiMessage (juce::MidiInput* midiSource,
                                     const juce::MidiMessage& message) override;

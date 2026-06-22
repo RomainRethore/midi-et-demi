@@ -1,12 +1,14 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
 #include "engine/AudioEngine.h"
 #include "ui/PluginEditorWindow.h"
 
 /**
-    Couche UI. Transport (Lecture/Stop, BPM, métronome, position), chargement de
-    plugin + éditeur, et clavier à l'écran. Ne connaît que la façade de AudioEngine.
+    Couche UI (étape 4a). Transport partagé + sélecteur de PISTE ACTIVE (1-8) :
+    les contrôles « plugin / mesures / enregistrer / effacer / volume / mute »
+    agissent sur la piste active. Ne connaît que la façade de AudioEngine.
 */
 class MainComponent : public juce::Component,
                       private juce::Timer
@@ -20,6 +22,8 @@ public:
 
 private:
     void timerCallback() override;
+    void selectTrack (int index);
+    void refreshActiveControls();
     void openPluginFile();
     void showPluginEditor();
 
@@ -28,8 +32,8 @@ private:
     juce::MidiKeyboardComponent keyboard { engine.getKeyboardState(),
                                            juce::MidiKeyboardComponent::horizontalKeyboard };
 
-    juce::Label        titleLabel;
-    juce::Label        statusLabel;
+    juce::Label titleLabel;
+    juce::Label statusLabel;
 
     // transport
     juce::TextButton   playButton   { "Lecture" };
@@ -39,16 +43,21 @@ private:
     juce::ToggleButton metronomeToggle { "Metronome" };
     juce::Label        positionLabel;
 
-    // boucle
-    juce::Label        barsLabel     { {}, "Mesures" };
-    juce::ComboBox     barsCombo;
-    juce::TextButton   recordButton  { "Enregistrer" };
-    juce::TextButton   clearButton   { "Effacer" };
-    juce::Label        loopStateLabel;
+    // sélecteur de piste
+    juce::Label                      tracksLabel { {}, "Piste active" };
+    std::array<juce::TextButton, 8>  trackButtons;
 
-    // plugin
+    // contrôles de la piste active
     juce::TextButton   loadButton   { "Charger un plugin..." };
-    juce::TextButton   editorButton { "Ouvrir l'editeur" };
+    juce::TextButton   editorButton { "Editeur" };
+    juce::Label        barsLabel    { {}, "Mesures" };
+    juce::ComboBox     barsCombo;
+    juce::TextButton   recordButton { "Enregistrer" };
+    juce::TextButton   clearButton  { "Effacer" };
+    juce::Label        volumeLabel  { {}, "Volume" };
+    juce::Slider       volumeSlider;
+    juce::ToggleButton muteToggle   { "Mute" };
+    juce::Label        activeInfoLabel;
 
     std::unique_ptr<juce::FileChooser>  fileChooser;
     std::unique_ptr<PluginEditorWindow> pluginWindow;
