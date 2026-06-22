@@ -21,9 +21,10 @@ public:
     /** À appeler depuis le timer de l'UI : rafraîchit les copies et redessine. */
     void update()
     {
-        posBeats = engine.getPositionInBeats();
-        playing  = engine.isPlaying();
-        active   = engine.getActiveTrack();
+        posBeats  = engine.getPositionInBeats();
+        playing   = engine.isPlaying();
+        active    = engine.getActiveTrack();
+        numerator = engine.getNumerator();
 
         for (int i = 0; i < numLanes; ++i)
             engine.getTrackDisplay (i, snapshots[(size_t) i], lengths[(size_t) i]);
@@ -63,11 +64,22 @@ public:
             }
             else
             {
+                // grille : lignes de temps (faibles) + lignes de mesure (marquées)
+                const int totalBeats = (int) std::lround (L);
+                for (int b = 1; b < totalBeats; ++b)
+                {
+                    const float gx      = inner.getX() + (float) ((double) b / L) * inner.getWidth();
+                    const bool  barLine = (numerator > 0) && (b % numerator == 0);
+                    g.setColour (barLine ? juce::Colours::white.withAlpha (0.28f)
+                                         : juce::Colours::white.withAlpha (0.08f));
+                    g.fillRect (gx, inner.getY(), barLine ? 1.5f : 1.0f, inner.getHeight());
+                }
+
                 // notes : rectangles dont la longueur = durée (note-on -> note-off)
                 g.setColour (juce::Colour (0xff5fd75f));
                 const auto&  evs = snapshots[(size_t) i];
                 const float  w   = inner.getWidth();
-                const float  noteH = juce::jmax (3.0f, inner.getHeight() / 24.0f);
+                const float  noteH = juce::jmax (6.0f, inner.getHeight() / 10.0f);
 
                 for (const auto& on : evs)
                 {
@@ -133,7 +145,8 @@ private:
     AudioEngine& engine;
     std::array<std::vector<med::ClipEvent>, numLanes> snapshots;
     std::array<double, numLanes> lengths {};
-    double posBeats = 0.0;
-    bool   playing  = false;
-    int    active   = 0;
+    double posBeats  = 0.0;
+    bool   playing   = false;
+    int    active    = 0;
+    int    numerator = 4;
 };
