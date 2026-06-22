@@ -87,6 +87,12 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                     if (msg.isController())
                         tracks[(size_t) a].setVolume ((float) ccValue / 127.0f);
                 }
+                else if (slot == 6) // Sélecteur de piste (potard) — continu
+                {
+                    if (msg.isController())
+                        activeTrack.store (juce::jlimit (0, numTracks - 1,
+                                                         (ccValue * numTracks) / 128));
+                }
                 else if (activation)
                 {
                     switch (slot)
@@ -96,10 +102,9 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                         case 2: clearPressed.store (true); break;
                         case 3: undoPressed.store (true); break;
                         case 4: metronomeEnabled.store (! metronomeEnabled.load()); break;
-                        default:
-                            if (slot >= 6 && slot < 6 + numTracks)
-                                activeTrack.store (slot - 6);
-                            break;
+                        case 7: activeTrack.store (juce::jmin (numTracks - 1, activeTrack.load() + 1)); break;
+                        case 8: activeTrack.store (juce::jmax (0, activeTrack.load() - 1)); break;
+                        default: break;
                     }
                 }
             }

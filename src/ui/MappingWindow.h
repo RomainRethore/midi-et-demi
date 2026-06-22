@@ -89,7 +89,7 @@ private:
         juce::TextButton clear;
     };
 
-    static constexpr int numSlots = 14;
+    static constexpr int numSlots = 9;
 
     AudioEngine& engine;
     juce::Label  header;
@@ -97,8 +97,8 @@ private:
 
     const std::array<const char*, numSlots> slotNames {
         "Lecture / Stop", "Enregistrer", "Effacer", "Annuler passe", "Metronome",
-        "Volume (piste active)", "Piste 1", "Piste 2", "Piste 3", "Piste 4",
-        "Piste 5", "Piste 6", "Piste 7", "Piste 8"
+        "Volume (piste active)", "Selecteur de piste (potard)",
+        "Piste suivante", "Piste precedente"
     };
 };
 
