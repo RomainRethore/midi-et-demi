@@ -5,6 +5,7 @@
 #include "engine/AudioEngine.h"
 #include "ui/PluginEditorWindow.h"
 #include "ui/LoopLanes.h"
+#include "ui/MappingWindow.h"
 
 /**
     Couche UI (étape 4a). Transport partagé + sélecteur de PISTE ACTIVE (1-8) :
@@ -59,12 +60,14 @@ private:
     juce::Label        volumeLabel  { {}, "Volume" };
     juce::Slider       volumeSlider;
     juce::ToggleButton muteToggle   { "Mute" };
+    juce::TextButton   mappingButton { "Mapping..." };
     juce::Label        activeInfoLabel;
 
     LoopLanes          loopLanes { engine };
 
     std::unique_ptr<juce::FileChooser>  fileChooser;
     std::unique_ptr<PluginEditorWindow> pluginWindow;
+    std::unique_ptr<MappingWindow>      mappingWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

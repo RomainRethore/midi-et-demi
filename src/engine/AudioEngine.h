@@ -4,6 +4,7 @@
 #include <atomic>
 #include <array>
 #include "domain/Transport.h"
+#include "domain/MidiMap.h"
 #include "engine/Metronome.h"
 #include "engine/PluginHost.h"
 #include "engine/Track.h"
@@ -39,11 +40,23 @@ public:
     void pressClear() noexcept               { clearPressed.store (true); }
     void pressUndo() noexcept                { undoPressed.store (true); }
 
+    // --- mapping MIDI ---
+    void startLearn (int slot) noexcept  { learnArmedSlot.store (slot); }
+    void cancelLearn() noexcept          { learnArmedSlot.store (-1); }
+    int  getLearnSlot() const noexcept   { return learnArmedSlot.load(); }
+    void clearBinding (int slot) noexcept { clearBindingSlot.store (slot); }
+    int  getBindingCode (int slot) const noexcept { return publishedSig[(size_t) slot].load(); }
+
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 
 private:
+    /** Apprentissage + résolution des contrôles mappés ; filtre 'live' des
+        messages consommés (ceux qui déclenchent une action ne jouent pas). */
+    void resolveMapping (juce::MidiBuffer& live);
+    void republishMap();
+
     juce::MidiKeyboardState&   keyboardState;
     juce::MidiMessageCollector midiCollector;
 
@@ -65,6 +78,12 @@ private:
     std::atomic<bool>   recordPressed      { false };
     std::atomic<bool>   clearPressed       { false };
     std::atomic<bool>   undoPressed        { false };
+
+    // --- mapping (table détenue par le fil audio) ---
+    med::MidiMap        midiMap;
+    std::atomic<int>    learnArmedSlot   { -1 };
+    std::atomic<int>    clearBindingSlot { -1 };
+    std::array<std::atomic<int>, med::MidiMap::numSlots> publishedSig;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
@@ -104,6 +123,14 @@ public:
     void pressRecord() noexcept               { source.pressRecord(); }
     void pressClear() noexcept                { source.pressClear(); }
     void pressUndo() noexcept                 { source.pressUndo(); }
+
+    // --- mapping MIDI ---
+    int  numMappingSlots() const noexcept     { return med::MidiMap::numSlots; }
+    void startLearn (int slot) noexcept       { source.startLearn (slot); }
+    void cancelLearn() noexcept               { source.cancelLearn(); }
+    int  getLearnSlot() const noexcept        { return source.getLearnSlot(); }
+    void clearBinding (int slot) noexcept     { source.clearBinding (slot); }
+    int  getBindingCode (int slot) const noexcept { return source.getBindingCode (slot); }
 
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }

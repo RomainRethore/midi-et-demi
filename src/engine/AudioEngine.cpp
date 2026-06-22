@@ -8,6 +8,108 @@
 EngineAudioSource::EngineAudioSource (juce::MidiKeyboardState& keyStateToUse)
     : keyboardState (keyStateToUse)
 {
+    for (auto& sig : publishedSig)
+        sig.store (-1);
+}
+
+void EngineAudioSource::republishMap()
+{
+    for (int s = 0; s < med::MidiMap::numSlots; ++s)
+    {
+        if (midiMap.slotHasBinding (s))
+        {
+            const auto c = midiMap.slotBinding (s);
+            publishedSig[(size_t) s].store (c.type == med::CtrlType::CC ? 1000 + c.number
+                                                                        : c.number);
+        }
+        else
+        {
+            publishedSig[(size_t) s].store (-1);
+        }
+    }
+}
+
+void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
+{
+    if (const int clearSlot = clearBindingSlot.exchange (-1); clearSlot >= 0)
+    {
+        midiMap.clearSlot (clearSlot);
+        republishMap();
+    }
+
+    const int learnSlot = learnArmedSlot.load();
+    bool      learnDone = false;
+
+    juce::MidiBuffer filtered;
+    for (const auto metadata : live)
+    {
+        const auto msg = metadata.getMessage();
+        const int  sp  = metadata.samplePosition;
+
+        med::Ctrl ctrl;
+        bool mappable   = false;
+        bool activation = false;
+        int  ccValue    = 0;
+
+        if (msg.isNoteOnOrOff())
+        {
+            ctrl       = { med::CtrlType::Note, msg.getNoteNumber() };
+            mappable   = true;
+            activation = msg.isNoteOn();
+        }
+        else if (msg.isController())
+        {
+            ctrl       = { med::CtrlType::CC, msg.getControllerNumber() };
+            mappable   = true;
+            ccValue    = msg.getControllerValue();
+            activation = ccValue >= 64;
+        }
+
+        bool consumed = false;
+        if (mappable)
+        {
+            if (learnSlot >= 0 && ! learnDone
+                && (msg.isNoteOn() || msg.isController())) // pas sur un note-off
+            {
+                midiMap.bind (learnSlot, ctrl);
+                republishMap();
+                learnArmedSlot.store (-1);
+                learnDone = true;
+                consumed  = true;
+            }
+            else if (const int slot = midiMap.findSlot (ctrl); slot >= 0)
+            {
+                consumed = true;
+                const int a = juce::jlimit (0, numTracks - 1, activeTrack.load());
+
+                if (slot == 5) // Volume (piste active) — continu
+                {
+                    if (msg.isController())
+                        tracks[(size_t) a].setVolume ((float) ccValue / 127.0f);
+                }
+                else if (activation)
+                {
+                    switch (slot)
+                    {
+                        case 0: requestedPlaying.store (! requestedPlaying.load()); break;
+                        case 1: recordPressed.store (true); break;
+                        case 2: clearPressed.store (true); break;
+                        case 3: undoPressed.store (true); break;
+                        case 4: metronomeEnabled.store (! metronomeEnabled.load()); break;
+                        default:
+                            if (slot >= 6 && slot < 6 + numTracks)
+                                activeTrack.store (slot - 6);
+                            break;
+                    }
+                }
+            }
+        }
+
+        if (! consumed)
+            filtered.addEvent (msg, sp);
+    }
+
+    live.swapWith (filtered);
 }
 
 void EngineAudioSource::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
@@ -36,7 +138,10 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     midiCollector.removeNextBlockOfMessages (liveMidi, numSamples);
     keyboardState.processNextMidiBuffer (liveMidi, 0, numSamples, true);
 
-    // 2) Commandes UI.
+    // 1b) Mapping : apprend / déclenche les actions, retire les messages consommés.
+    resolveMapping (liveMidi);
+
+    // 2) Commandes UI (et celles posées par le mapping ci-dessus).
     const bool clearCmd  = clearPressed.exchange (false);
     const bool recordCmd = recordPressed.exchange (false);
     const bool undoCmd   = undoPressed.exchange (false);

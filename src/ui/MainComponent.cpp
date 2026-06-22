@@ -5,7 +5,7 @@
 MainComponent::MainComponent()
 {
     addAndMakeVisible (titleLabel);
-    titleLabel.setText ("Midi et demi - multipiste + overdub (etape 5)", juce::dontSendNotification);
+    titleLabel.setText ("Midi et demi - mapping MIDI (etape 6)", juce::dontSendNotification);
     titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centred);
 
@@ -95,6 +95,14 @@ MainComponent::MainComponent()
         engine.setTrackMute (engine.getActiveTrack(), muteToggle.getToggleState());
     };
 
+    addAndMakeVisible (mappingButton);
+    mappingButton.onClick = [this]
+    {
+        if (mappingWindow != nullptr) { mappingWindow->toFront (true); return; }
+        mappingWindow = std::make_unique<MappingWindow> (engine);
+        mappingWindow->onCloseButton = [this] { mappingWindow = nullptr; };
+    };
+
     addAndMakeVisible (activeInfoLabel);
     activeInfoLabel.setJustificationType (juce::Justification::centredLeft);
 
@@ -111,7 +119,8 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
-    pluginWindow = nullptr;
+    pluginWindow  = nullptr;
+    mappingWindow = nullptr;
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -156,6 +165,7 @@ void MainComponent::resized()
     volumeLabel .setBounds (activeRow2.removeFromLeft (70).reduced (2));
     volumeSlider.setBounds (activeRow2.removeFromLeft (240).reduced (2));
     muteToggle  .setBounds (activeRow2.removeFromLeft (90).reduced (2));
+    mappingButton.setBounds (activeRow2.removeFromLeft (110).reduced (2));
     activeInfoLabel.setBounds (activeRow2.reduced (2));
     area.removeFromTop (8);
 
@@ -199,6 +209,10 @@ void MainComponent::timerCallback()
     const int    active     = engine.getActiveTrack();
     const int    state      = engine.getTrackLoopState (active);
     const juce::String name = engine.getTrackPluginName (active);
+
+    // Reflète le volume piloté au potard (sauf pendant qu'on bouge le slider).
+    if (! volumeSlider.isMouseButtonDown())
+        volumeSlider.setValue (engine.getTrackVolume (active), juce::dontSendNotification);
 
     juce::String stateText;
     switch (state)

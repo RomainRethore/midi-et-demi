@@ -57,3 +57,8 @@ add_executable(loopclip_tests tests/loopclip_tests.cpp)
 target_include_directories(loopclip_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(loopclip_tests PRIVATE cxx_std_17)
 add_test(NAME loopclip_tests COMMAND loopclip_tests)
+
+add_executable(midimap_tests tests/midimap_tests.cpp)
+target_include_directories(midimap_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(midimap_tests PRIVATE cxx_std_17)
+add_test(NAME midimap_tests COMMAND midimap_tests)
