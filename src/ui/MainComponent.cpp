@@ -210,9 +210,13 @@ void MainComponent::timerCallback()
     const int    state      = engine.getTrackLoopState (active);
     const juce::String name = engine.getTrackPluginName (active);
 
-    // Reflète le volume piloté au potard (sauf pendant qu'on bouge le slider).
+    // Reflète les potards mappés (volume, BPM, mesures) sur l'UI.
     if (! volumeSlider.isMouseButtonDown())
         volumeSlider.setValue (engine.getTrackVolume (active), juce::dontSendNotification);
+    if (! bpmSlider.isMouseButtonDown())
+        bpmSlider.setValue (engine.getTempo(), juce::dontSendNotification);
+    if (barsCombo.getSelectedId() != engine.getTrackBars (active))
+        barsCombo.setSelectedId (engine.getTrackBars (active), juce::dontSendNotification);
 
     juce::String stateText;
     switch (state)

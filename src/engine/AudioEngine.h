@@ -32,6 +32,7 @@ public:
     double getPositionInBeats() const noexcept  { return publishedBeats.load(); }
     bool   isPlaying() const noexcept           { return publishedPlaying.load(); }
     int    getNumerator() const noexcept        { return numerator; }
+    double getTempo() const noexcept            { return requestedBpm.load(); }
 
     // --- pistes / boucle ---
     void setActiveTrack (int index) noexcept { activeTrack.store (index); }
@@ -121,6 +122,7 @@ public:
     double getPositionInBeats() const noexcept    { return source.getPositionInBeats(); }
     bool   isPlaying() const noexcept             { return source.isPlaying(); }
     int    getNumerator() const noexcept          { return source.getNumerator(); }
+    double getTempo() const noexcept              { return source.getTempo(); }
 
     // --- pistes ---
     int  numTracks() const noexcept          { return EngineAudioSource::numTracks; }

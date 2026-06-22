@@ -105,6 +105,20 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                         activeTrack.store (juce::jlimit (0, numTracks - 1,
                                                          (ccValue * numTracks) / 128));
                 }
+                else if (slot == 9) // Mesures (piste active) — continu
+                {
+                    if (msg.isController())
+                    {
+                        static const int barsTable[4] = { 1, 2, 4, 8 };
+                        const int idx = juce::jlimit (0, 3, (ccValue * 4) / 128);
+                        tracks[(size_t) a].setBars (barsTable[idx]);
+                    }
+                }
+                else if (slot == 10) // BPM (tempo) — continu
+                {
+                    if (msg.isController())
+                        requestedBpm.store (40.0 + (ccValue / 127.0) * 200.0);
+                }
                 else if (activation)
                 {
                     switch (slot)
