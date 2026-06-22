@@ -104,6 +104,25 @@ int main()
                "note 50 a l'offset 1.2 (apres la boucle)");
     }
 
+    // --- truncate (annulation de passe) -----------------------------------
+    {
+        LoopClip clip;
+        clip.setLengthBeats (4.0);
+        addNote (clip, 0.0, 60);
+        addNote (clip, 1.0, 62);
+        addNote (clip, 2.0, 64);
+        check (clip.size() == 3, "3 evenements avant truncate");
+
+        clip.truncate (2);
+        check (clip.size() == 2, "truncate(2) garde 2 evenements");
+
+        clip.truncate (5); // n > taille : sans effet
+        check (clip.size() == 2, "truncate au-dela de la taille = sans effet");
+
+        clip.truncate (0);
+        check (clip.isEmpty(), "truncate(0) vide la boucle");
+    }
+
     std::cout << "\n" << (testsRun - testsFailed) << "/" << testsRun << " tests OK\n";
     if (testsFailed > 0) { std::cout << testsFailed << " test(s) en echec.\n"; return 1; }
     std::cout << "Tous les tests passent.\n";

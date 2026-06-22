@@ -30,6 +30,7 @@ public:
     void stopRecording();
     void clearLoop();
     void onTransportStopped();
+    void undoLastPass();
 
     /** Coupe les notes en cours au prochain bloc (ex. avant un réalignement). */
     void requestAllNotesOff() noexcept { allNotesOffPending = true; }
@@ -61,6 +62,7 @@ private:
     LoopState     loopState = LoopState::Empty;
     bool          heldNotes[16][128] = {};
     bool          allNotesOffPending = false;
+    std::vector<std::size_t> passStarts; // taille du clip au début de chaque passe (undo)
 
     juce::AudioBuffer<float> trackBuffer;
     double currentSampleRate = 44100.0;

@@ -19,6 +19,7 @@ void Track::prepare (double sampleRate, int blockSize)
 
     synth.setCurrentPlaybackSampleRate (sampleRate);
     clip.reserve (20000);
+    passStarts.reserve (4096);
     trackBuffer.setSize (2, blockSize, false, false, true);
 
     const juce::ScopedLock sl (pluginLock);
@@ -51,11 +52,49 @@ juce::String Track::getPluginName() const
 
 void Track::startRecording (double lengthBeats)
 {
-    clip.clear();
-    clip.setLengthBeats (lengthBeats);
+    // Piste vide => nouvelle boucle ; piste avec contenu => overdub (on garde tout).
+    if (clip.isEmpty())
+    {
+        clip.clear();
+        clip.setLengthBeats (lengthBeats);
+    }
+
     std::memset (heldNotes, 0, sizeof (heldNotes));
+    passStarts.clear();
+    passStarts.push_back (clip.size()); // début de la première passe de cette prise
     loopState = LoopState::Recording;
     allNotesOffPending = true;
+}
+
+void Track::undoLastPass()
+{
+    if (! passStarts.empty())
+    {
+        const std::size_t target = passStarts.back();
+        if (clip.size() > target)
+        {
+            clip.truncate (target);            // enlève la passe en cours
+        }
+        else if (passStarts.size() > 1)
+        {
+            passStarts.pop_back();
+            clip.truncate (passStarts.back()); // enlève la passe précédente
+        }
+        else
+        {
+            clip.truncate (0);
+        }
+    }
+    else
+    {
+        clip.clear();
+    }
+
+    std::memset (heldNotes, 0, sizeof (heldNotes));
+    allNotesOffPending = true;
+
+    if (clip.isEmpty() && loopState == LoopState::Playing)
+        loopState = LoopState::Empty;
 }
 
 void Track::stopRecording()
@@ -114,13 +153,11 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
     const double L      = clip.getLengthBeats();
     const double linEnd = linStart + deltaBeats;
 
-    // Fin automatique de la prise après une boucle complète.
+    // Overdub : à chaque tour de boucle, on marque le début d'une nouvelle passe
+    // (l'enregistrement ne s'arrête PAS tout seul ; c'est l'utilisateur qui stoppe).
     if (loopState == LoopState::Recording && transportPlaying && L > 0.0)
         if ((long) std::floor (linEnd / L) > (long) std::floor (linStart / L))
-        {
-            finishRecording();
-            loopState = LoopState::Playing;
-        }
+            passStarts.push_back (clip.size());
 
     // Enregistrement des événements live.
     if (loopState == LoopState::Recording && L > 0.0 && spb > 0.0)
@@ -154,7 +191,10 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
     juce::MidiBuffer combined;
     combined.addEvents (liveMidi, 0, numSamples, 0);
 
-    if (loopState == LoopState::Playing && ! clip.isEmpty() && L > 0.0 && spb > 0.0)
+    // On joue la boucle accumulée en lecture ET pendant l'overdub (pour entendre
+    // les passes précédentes et empiler dessus).
+    if ((loopState == LoopState::Playing || loopState == LoopState::Recording)
+        && ! clip.isEmpty() && L > 0.0 && spb > 0.0)
     {
         const double loopLocalStart = std::fmod (linStart, L);
         const double to             = loopLocalStart + deltaBeats;

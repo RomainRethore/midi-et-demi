@@ -32,6 +32,9 @@ public:
     bool isEmpty() const noexcept { return events.empty(); }
     std::size_t size() const noexcept { return events.size(); }
 
+    /** Ne garde que les n premiers événements (annulation d'une passe d'overdub). */
+    void truncate (std::size_t n) noexcept { if (n < events.size()) events.resize (n); }
+
     void addEvent (double beat, const uint8_t* data, int n)
     {
         ClipEvent e;

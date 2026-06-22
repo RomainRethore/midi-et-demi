@@ -5,7 +5,7 @@
 MainComponent::MainComponent()
 {
     addAndMakeVisible (titleLabel);
-    titleLabel.setText ("Midi et demi - multipiste (etape 4a)", juce::dontSendNotification);
+    titleLabel.setText ("Midi et demi - multipiste + overdub (etape 5)", juce::dontSendNotification);
     titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centred);
 
@@ -70,6 +70,9 @@ MainComponent::MainComponent()
 
     addAndMakeVisible (recordButton);
     recordButton.onClick = [this] { engine.pressRecord(); };
+
+    addAndMakeVisible (undoButton);
+    undoButton.onClick = [this] { engine.pressUndo(); };
 
     addAndMakeVisible (clearButton);
     clearButton.onClick = [this] { engine.pressClear(); };
@@ -143,8 +146,9 @@ void MainComponent::resized()
     editorButton.setBounds (activeRow1.removeFromLeft (90).reduced (2));
     barsLabel   .setBounds (activeRow1.removeFromLeft (70).reduced (2));
     barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
-    recordButton.setBounds (activeRow1.removeFromLeft (140).reduced (2));
-    clearButton .setBounds (activeRow1.removeFromLeft (100).reduced (2));
+    recordButton.setBounds (activeRow1.removeFromLeft (130).reduced (2));
+    undoButton  .setBounds (activeRow1.removeFromLeft (120).reduced (2));
+    clearButton .setBounds (activeRow1.removeFromLeft (90).reduced (2));
     area.removeFromTop (6);
 
     auto activeRow2 = area.removeFromTop (38);
@@ -210,7 +214,7 @@ void MainComponent::timerCallback()
     }
     else
     {
-        recordButton.setButtonText (state == 3 ? "Re-enregistrer" : "Enregistrer");
+        recordButton.setButtonText (state == 3 ? "Overdub" : "Enregistrer");
         recordButton.setColour (juce::TextButton::buttonColourId,
                                 getLookAndFeel().findColour (juce::TextButton::buttonColourId));
     }

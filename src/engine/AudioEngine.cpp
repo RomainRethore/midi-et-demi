@@ -39,6 +39,7 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     // 2) Commandes UI.
     const bool clearCmd  = clearPressed.exchange (false);
     const bool recordCmd = recordPressed.exchange (false);
+    const bool undoCmd   = undoPressed.exchange (false);
 
     // 3) Transport : tempo + fronts lecture/arrêt.
     transport.setTempo (requestedBpm.load());
@@ -63,9 +64,12 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     }
     prevPlaying = wantPlay;
 
-    // 4) Effacer / Enregistrer sur la piste active.
+    // 4) Effacer / Annuler / Enregistrer sur la piste active.
     if (clearCmd)
         tracks[(size_t) active].clearLoop();
+
+    if (undoCmd)
+        tracks[(size_t) active].undoLastPass();
 
     if (recordCmd)
     {

@@ -37,6 +37,7 @@ public:
     int  getActiveTrack() const noexcept     { return activeTrack.load(); }
     void pressRecord() noexcept              { recordPressed.store (true); }
     void pressClear() noexcept               { clearPressed.store (true); }
+    void pressUndo() noexcept                { undoPressed.store (true); }
 
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
@@ -63,6 +64,7 @@ private:
     std::atomic<int>    activeTrack        { 0 };
     std::atomic<bool>   recordPressed      { false };
     std::atomic<bool>   clearPressed       { false };
+    std::atomic<bool>   undoPressed        { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
@@ -101,6 +103,7 @@ public:
     int  getActiveTrack() const noexcept      { return source.getActiveTrack(); }
     void pressRecord() noexcept               { source.pressRecord(); }
     void pressClear() noexcept                { source.pressClear(); }
+    void pressUndo() noexcept                 { source.pressUndo(); }
 
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }

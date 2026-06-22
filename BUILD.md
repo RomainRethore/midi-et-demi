@@ -95,7 +95,18 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
 4. **« Effacer »** vide la boucle. **« Re-enregistrer »** en refait une.
 
 > Le bouton **« Lecture/Stop »** suit l'état réel ; tu peux aussi arrêter
-> l'enregistrement à la main en recliquant **« ● REC »**.
+> l'enregistrement à la main en recliquant **« Stop REC »**.
+
+### Étapes 4-5 — multipiste + overdub
+1. Boutons **1-8** : choisis la piste active (numéro entre crochets `[N]`).
+   Couleur : gris = vide, vert = a une boucle, rouge = enregistre.
+2. Charge un plugin, règle ses **Mesures**, **Enregistrer** : la boucle tourne
+   **en continu**, tu joues quand tu veux, tu **réentends** ce que tu as déjà
+   posé et tu **ajoutes** par-dessus (overdub). **Stop REC** quand tu as fini.
+3. Sur une piste qui a déjà une boucle, le bouton devient **« Overdub »** :
+   il enrichit la boucle (ne la remplace pas).
+4. **Annuler passe** retire la dernière couche ; **Effacer** vide la piste.
+5. Change de piste, charge un autre son, recommence → empile tes pistes.
 
 ---
 
