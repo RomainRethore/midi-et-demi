@@ -63,21 +63,56 @@ public:
             }
             else
             {
-                // notes (note-on uniquement)
+                // notes : rectangles dont la longueur = durée (note-on -> note-off)
                 g.setColour (juce::Colour (0xff5fd75f));
-                for (const auto& ev : snapshots[(size_t) i])
+                const auto&  evs = snapshots[(size_t) i];
+                const float  w   = inner.getWidth();
+                const float  noteH = juce::jmax (3.0f, inner.getHeight() / 24.0f);
+
+                for (const auto& on : evs)
                 {
-                    const bool noteOn = ev.numBytes >= 3
-                                     && (ev.bytes[0] & 0xF0) == 0x90
-                                     && ev.bytes[2] > 0;
-                    if (! noteOn)
+                    const bool isOn = on.numBytes >= 3
+                                   && (on.bytes[0] & 0xF0) == 0x90
+                                   && on.bytes[2] > 0;
+                    if (! isOn)
                         continue;
 
-                    const float fx = (float) (ev.beat / L);
-                    const float x  = inner.getX() + fx * inner.getWidth();
-                    const float fy = 1.0f - (float) ev.bytes[1] / 127.0f;
-                    const float y  = inner.getY() + 2.0f + fy * (inner.getHeight() - 4.0f);
-                    g.fillRect (x, y, 2.5f, 2.5f);
+                    const int ch    = on.bytes[0] & 0x0F;
+                    const int pitch = on.bytes[1];
+
+                    // Cherche le note-off correspondant le plus proche (circulaire).
+                    double dur = -1.0;
+                    for (const auto& off : evs)
+                    {
+                        const bool isOff = off.numBytes >= 2
+                                        && (((off.bytes[0] & 0xF0) == 0x80)
+                                            || ((off.bytes[0] & 0xF0) == 0x90 && off.bytes[2] == 0));
+                        if (! isOff || (off.bytes[0] & 0x0F) != ch || off.bytes[1] != pitch)
+                            continue;
+
+                        double d = std::fmod (off.beat - on.beat, L);
+                        if (d < 0.0)    d += L;
+                        if (d <= 1.0e-6) d = L;
+                        if (dur < 0.0 || d < dur)
+                            dur = d;
+                    }
+                    if (dur < 0.0)
+                        dur = 0.25; // pas de note-off trouvé : durée par défaut
+
+                    const float fy = 1.0f - (float) pitch / 127.0f;
+                    const float y  = inner.getY() + 2.0f + fy * (inner.getHeight() - noteH - 4.0f);
+                    const float x1 = inner.getX() + (float) (on.beat / L) * w;
+
+                    if (on.beat + dur <= L)
+                    {
+                        g.fillRect (x1, y, juce::jmax (2.0f, (float) (dur / L) * w), noteH);
+                    }
+                    else // note tenue à cheval sur la fin : deux segments
+                    {
+                        g.fillRect (x1, y, juce::jmax (2.0f, (float) ((L - on.beat) / L) * w), noteH);
+                        g.fillRect (inner.getX(), y,
+                                    juce::jmax (2.0f, (float) ((on.beat + dur - L) / L) * w), noteH);
+                    }
                 }
 
                 // tête de lecture
