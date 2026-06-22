@@ -45,11 +45,8 @@ MainComponent::MainComponent()
         auto& b = trackButtons[(size_t) i];
         addAndMakeVisible (b);
         b.setButtonText (juce::String (i + 1));
-        b.setClickingTogglesState (true);
-        b.setRadioGroupId (1000);
         b.onClick = [this, i] { selectTrack (i); };
     }
-    trackButtons[0].setToggleState (true, juce::dontSendNotification);
 
     // --- contrôles de la piste active ---
     addAndMakeVisible (loadButton);
@@ -162,7 +159,6 @@ void MainComponent::resized()
 void MainComponent::selectTrack (int index)
 {
     engine.setActiveTrack (index);
-    trackButtons[(size_t) index].setToggleState (true, juce::dontSendNotification);
     refreshActiveControls();
 }
 
@@ -219,14 +215,18 @@ void MainComponent::timerCallback()
                                 getLookAndFeel().findColour (juce::TextButton::buttonColourId));
     }
 
-    // Couleur des pistes ayant une boucle.
+    // Couleur = état de la boucle ; crochets = piste active.
     for (int i = 0; i < (int) trackButtons.size(); ++i)
     {
         const int st = engine.getTrackLoopState (i);
-        auto colour = (st == 3) ? juce::Colours::green
-                    : (st == 2) ? juce::Colours::red
-                                : getLookAndFeel().findColour (juce::TextButton::buttonColourId);
-        trackButtons[(size_t) i].setColour (juce::TextButton::buttonColourId, colour);
+        const auto colour = (st == 2) ? juce::Colour (0xffc62828)   // rouge : enregistrement
+                          : (st == 3) ? juce::Colour (0xff2e7d32)   // vert  : a une boucle
+                                      : getLookAndFeel().findColour (juce::TextButton::buttonColourId);
+
+        auto& b = trackButtons[(size_t) i];
+        b.setColour (juce::TextButton::buttonColourId, colour);
+        b.setButtonText (i == active ? ("[" + juce::String (i + 1) + "]")
+                                     : juce::String (i + 1));
     }
 }
 
