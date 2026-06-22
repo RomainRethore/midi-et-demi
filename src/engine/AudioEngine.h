@@ -35,6 +35,7 @@ public:
     void setPlaying (bool shouldPlay) noexcept  { requestedPlaying.store (shouldPlay); }
     void setMetronomeEnabled (bool on) noexcept { metronomeEnabled.store (on); }
     double getPositionInBeats() const noexcept  { return publishedBeats.load(); }
+    bool   isPlaying() const noexcept           { return publishedPlaying.load(); }
     int    getNumerator() const noexcept        { return numerator; }
 
     // --- boucle ---
@@ -48,6 +49,9 @@ public:
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 
 private:
+    /** Termine une prise : écrit les note-off des notes encore tenues. */
+    void finishRecording();
+
     juce::MidiKeyboardState&   keyboardState;
     juce::Synthesiser          synth;
     juce::MidiMessageCollector midiCollector;
@@ -70,12 +74,14 @@ private:
     med::LoopClip clip;
     LoopState     loopState = LoopState::Empty;
     bool          allNotesOffPending = false;
+    bool          heldNotes[16][128] = {}; // notes tenues pendant l'enregistrement
 
     // --- échanges avec l'UI ---
     std::atomic<double> requestedBpm      { 120.0 };
     std::atomic<bool>   requestedPlaying  { false };
     std::atomic<bool>   metronomeEnabled  { true };
     std::atomic<double> publishedBeats     { 0.0 };
+    std::atomic<bool>   publishedPlaying   { false };
 
     std::atomic<int>    requestedBars      { 4 };
     std::atomic<bool>   recordPressed      { false };
@@ -109,6 +115,7 @@ public:
     void   setPlaying (bool shouldPlay) noexcept  { source.setPlaying (shouldPlay); }
     void   setMetronomeEnabled (bool on) noexcept { source.setMetronomeEnabled (on); }
     double getPositionInBeats() const noexcept    { return source.getPositionInBeats(); }
+    bool   isPlaying() const noexcept             { return source.isPlaying(); }
     int    getNumerator() const noexcept          { return source.getNumerator(); }
 
     // --- boucle ---

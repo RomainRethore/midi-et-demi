@@ -15,7 +15,7 @@ MainComponent::MainComponent()
 
     // --- transport ---
     addAndMakeVisible (playButton);
-    playButton.onClick = [this] { togglePlay(); };
+    playButton.onClick = [this] { engine.setPlaying (! engine.isPlaying()); };
 
     addAndMakeVisible (bpmLabel);
     bpmLabel.setJustificationType (juce::Justification::centredRight);
@@ -126,14 +126,16 @@ void MainComponent::timerCallback()
 {
     statusLabel.setText (engine.getStatusText(), juce::dontSendNotification);
 
+    const bool   playing   = engine.isPlaying();
     const double beats     = engine.getPositionInBeats();
     const int    numerator = engine.getNumerator();
     const int    bar       = (int) std::floor (beats / numerator) + 1;
     const int    beatInBar = ((int) std::floor (beats)) % numerator + 1;
 
-    positionLabel.setText (isPlaying ? ("Mesure " + juce::String (bar)
-                                        + " - Temps " + juce::String (beatInBar))
-                                     : juce::String ("Arrete"),
+    playButton.setButtonText (playing ? "Stop" : "Lecture");
+    positionLabel.setText (playing ? ("Mesure " + juce::String (bar)
+                                      + " - Temps " + juce::String (beatInBar))
+                                   : juce::String ("Arrete"),
                            juce::dontSendNotification);
 
     // --- état de la boucle ---
@@ -163,13 +165,6 @@ void MainComponent::timerCallback()
             break;
         default: break;
     }
-}
-
-void MainComponent::togglePlay()
-{
-    isPlaying = ! isPlaying;
-    engine.setPlaying (isPlaying);
-    playButton.setButtonText (isPlaying ? "Stop" : "Lecture");
 }
 
 void MainComponent::openPluginFile()

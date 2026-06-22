@@ -20,7 +20,6 @@ public:
 
 private:
     void timerCallback() override;
-    void togglePlay();
     void openPluginFile();
     void showPluginEditor();
 
@@ -39,7 +38,6 @@ private:
     juce::Label        bpmUnitLabel  { {}, "BPM" };
     juce::ToggleButton metronomeToggle { "Metronome" };
     juce::Label        positionLabel;
-    bool               isPlaying = false;
 
     // boucle
     juce::Label        barsLabel     { {}, "Mesures" };

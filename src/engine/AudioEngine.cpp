@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 //==============================================================================
 // EngineAudioSource
@@ -60,7 +61,11 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     midiCollector.removeNextBlockOfMessages (liveMidi, numSamples);
     keyboardState.processNextMidiBuffer (liveMidi, 0, numSamples, true);
 
-    // 2) Transport : tempo + fronts lecture/arrêt.
+    // 2) Commandes UI (capturées en début de bloc).
+    const bool clearCmd  = clearPressed.exchange (false);
+    const bool recordCmd = recordPressed.exchange (false);
+
+    // 3) Transport : tempo + fronts lecture/arrêt.
     transport.setTempo (requestedBpm.load());
     const bool wantPlay = requestedPlaying.load();
     if (wantPlay && ! prevPlaying)
@@ -70,60 +75,69 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         beatCounter = 0;
         nextBeatPos = 0.0;
         metronome.reset();
-        if (loopState == LoopState::Armed)
-            loopState = LoopState::Recording; // enregistre dès le premier temps
     }
     else if (! wantPlay && prevPlaying)
     {
+        if (loopState == LoopState::Recording)
+        {
+            finishRecording();
+            loopState = LoopState::Playing;
+        }
         transport.stop();
         transport.rewind();
         metronome.reset();
-        if (loopState == LoopState::Recording)
-            loopState = LoopState::Playing;
         allNotesOffPending = true;
     }
     prevPlaying = wantPlay;
 
-    // 3) Commandes boucle (depuis l'UI).
-    if (clearPressed.exchange (false))
+    // 4) Effacer / Enregistrer.
+    if (clearCmd)
     {
         clip.clear();
         loopState = LoopState::Empty;
         allNotesOffPending = true;
     }
-    if (recordPressed.exchange (false))
+    if (recordCmd)
     {
-        switch (loopState)
+        if (loopState == LoopState::Recording)
         {
-            case LoopState::Recording: loopState = LoopState::Playing; break;
-            case LoopState::Armed:     loopState = clip.isEmpty() ? LoopState::Empty
-                                                                  : LoopState::Playing; break;
-            default: // Empty / Playing -> on (ré)arme une nouvelle prise
-                clip.clear();
-                clip.setLengthBeats ((double) (requestedBars.load() * numerator));
-                loopState = LoopState::Armed;
-                if (! requestedPlaying.load())
-                    { /* en attente : démarrera au lancement de la lecture */ }
-                break;
+            finishRecording();
+            loopState = LoopState::Playing; // arrêt manuel de la prise
+        }
+        else
+        {
+            // Démarrage immédiat d'une prise, depuis le début.
+            clip.clear();
+            clip.setLengthBeats ((double) (requestedBars.load() * numerator));
+            std::memset (heldNotes, 0, sizeof (heldNotes));
+            transport.rewind();
+            transport.start();
+            requestedPlaying.store (true);
+            prevPlaying = true;
+            beatCounter = 0;
+            nextBeatPos = 0.0;
+            metronome.reset();
+            allNotesOffPending = true;
+            loopState = LoopState::Recording;
         }
     }
 
-    // 4) Géométrie temporelle du bloc.
+    // 5) Géométrie temporelle du bloc.
     const double spb        = transport.samplesPerBeat();
     const double deltaBeats = spb > 0.0 ? (double) numSamples / spb : 0.0;
     const double L          = clip.getLengthBeats();
     const double linStart   = transport.getPositionInBeats();
     const double linEnd      = linStart + deltaBeats;
 
-    // Détection de frontière de boucle (changement de "loop index").
-    if (transport.isPlaying() && L > 0.0)
+    // Fin automatique de la prise après une boucle complète.
+    if (transport.isPlaying() && L > 0.0 && loopState == LoopState::Recording)
     {
         const long idxStart = (long) std::floor (linStart / L);
         const long idxEnd   = (long) std::floor (linEnd   / L);
         if (idxEnd > idxStart)
         {
-            if (loopState == LoopState::Armed)          loopState = LoopState::Recording;
-            else if (loopState == LoopState::Recording) loopState = LoopState::Playing;
+            finishRecording();
+            loopState = LoopState::Playing;
         }
     }
 
@@ -147,6 +161,14 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
                 bytes[i] = (std::uint8_t) raw[i];
 
             clip.addEvent (evBeat, bytes, n);
+
+            // Suivi des notes tenues (pour fermer celles laissées ouvertes).
+            const int ch = msg.getChannel();
+            if (ch >= 1 && ch <= 16)
+            {
+                if (msg.isNoteOn())       heldNotes[ch - 1][msg.getNoteNumber()] = true;
+                else if (msg.isNoteOff()) heldNotes[ch - 1][msg.getNoteNumber()] = false;
+            }
         }
     }
 
@@ -242,7 +264,29 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     // 9) Avance + publication vers l'UI.
     transport.advance (numSamples);
     publishedBeats.store (transport.getPositionInBeats());
+    publishedPlaying.store (transport.isPlaying());
     publishedLoopState.store ((int) loopState);
+}
+
+void EngineAudioSource::finishRecording()
+{
+    // Ferme proprement les notes restées enfoncées en fin de prise :
+    // on inscrit leur note-off juste avant la fin de la boucle, et on coupe
+    // le son courant de l'instrument.
+    const double L       = clip.getLengthBeats();
+    const double offBeat = (L > 1.0e-3 ? L - 1.0e-3 : 0.0);
+
+    for (int ch = 0; ch < 16; ++ch)
+        for (int note = 0; note < 128; ++note)
+            if (heldNotes[ch][note])
+            {
+                const std::uint8_t off[3] = { (std::uint8_t) (0x80 | ch),
+                                              (std::uint8_t) note, 0 };
+                clip.addEvent (offBeat, off, 3);
+                heldNotes[ch][note] = false;
+            }
+
+    allNotesOffPending = true;
 }
 
 //==============================================================================
