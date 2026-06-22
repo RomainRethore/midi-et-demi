@@ -135,7 +135,15 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                         case 4: metronomeEnabled.store (! metronomeEnabled.load()); break;
                         case 7: activeTrack.store (juce::jmin (numTracks - 1, activeTrack.load() + 1)); break;
                         case 8: activeTrack.store (juce::jmax (0, activeTrack.load() - 1)); break;
-                        default: break;
+                        case 19: tracks[(size_t) a].setMute (! tracks[(size_t) a].isMuted()); break;
+                        case 28: openEditorRequested.store (true); break;
+                        default:
+                            if (slot >= 20 && slot < 20 + numTracks)
+                            {
+                                auto& tr = tracks[(size_t) (slot - 20)];
+                                tr.setMute (! tr.isMuted());
+                            }
+                            break;
                     }
                 }
             }

@@ -217,6 +217,11 @@ void MainComponent::timerCallback()
         bpmSlider.setValue (engine.getTempo(), juce::dontSendNotification);
     if (barsCombo.getSelectedId() != engine.getTrackBars (active))
         barsCombo.setSelectedId (engine.getTrackBars (active), juce::dontSendNotification);
+    muteToggle.setToggleState (engine.isTrackMuted (active), juce::dontSendNotification);
+
+    // Une action mappée a demandé d'ouvrir l'éditeur du plugin de la piste active.
+    if (engine.consumeOpenEditorRequest())
+        showPluginEditor();
 
     juce::String stateText;
     switch (state)

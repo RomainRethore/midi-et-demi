@@ -113,7 +113,9 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
    Effacer, Annuler, Métronome, **Volume piste active** (potard),
    **Sélecteur de piste** (potard → piste 1-8), **Piste suivante**,
    **Piste précédente**, **Mesures piste active** (potard → 1/2/4/8),
-   **BPM** (potard → 40-240). Un moniteur affiche le dernier contrôle reçu.
+   **BPM** (potard → 40-240), **Volume piste 1-8**, **Mute piste active**,
+   **Mute piste 1-8**, **Éditeur piste active**. Liste défilante + moniteur du
+   dernier contrôle reçu. Seul le **chargement de plugin** reste à la souris.
 2. Clique **« Apprendre »** sur une action, puis **bouge un potard / bouton**
    de l'Oxygen → l'association s'affiche (« CC n »). Le **X** efface.
 3. Le contrôle déclenche l'action.

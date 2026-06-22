@@ -5,8 +5,9 @@
 #include "engine/AudioEngine.h"
 
 /**
-    Contenu de la fenêtre de mapping : une ligne par action, avec l'association
-    MIDI courante, un bouton « Apprendre » et un bouton pour effacer.
+    Contenu de la fenêtre de mapping : en-tête + moniteur MIDI (fixes), puis une
+    liste défilante (une ligne par action) avec l'association courante, un bouton
+    « Apprendre » et un bouton pour effacer.
 */
 class MappingContent : public juce::Component,
                        private juce::Timer
@@ -28,14 +29,14 @@ public:
         {
             auto& row = rows[(size_t) s];
 
-            addAndMakeVisible (row.name);
+            list.addAndMakeVisible (row.name);
             row.name.setText (slotNames[(size_t) s], juce::dontSendNotification);
 
-            addAndMakeVisible (row.binding);
+            list.addAndMakeVisible (row.binding);
             row.binding.setJustificationType (juce::Justification::centred);
             row.binding.setColour (juce::Label::backgroundColourId, juce::Colour (0xff20232c));
 
-            addAndMakeVisible (row.learn);
+            list.addAndMakeVisible (row.learn);
             row.learn.setButtonText ("Apprendre");
             row.learn.onClick = [this, s]
             {
@@ -43,12 +44,16 @@ public:
                 else                            engine.startLearn (s);
             };
 
-            addAndMakeVisible (row.clear);
+            list.addAndMakeVisible (row.clear);
             row.clear.setButtonText ("X");
             row.clear.onClick = [this, s] { engine.clearBinding (s); };
         }
 
-        setSize (500, 76 + numSlots * 30);
+        viewport.setViewedComponent (&list, false);
+        viewport.setScrollBarsShown (true, false);
+        addAndMakeVisible (viewport);
+
+        setSize (520, 20 + 32 + 26 + 4 + visibleRows * rowH);
         startTimerHz (15);
     }
 
@@ -61,24 +66,29 @@ public:
         monitor.setBounds (area.removeFromTop (26));
         area.removeFromTop (4);
 
+        viewport.setBounds (area);
+
+        const int w = viewport.getMaximumVisibleWidth();
+        list.setSize (w, numSlots * rowH);
+
         for (int s = 0; s < numSlots; ++s)
         {
             auto& row = rows[(size_t) s];
-            auto r = area.removeFromTop (30);
-            row.name   .setBounds (r.removeFromLeft (180).reduced (2));
-            row.binding.setBounds (r.removeFromLeft (90).reduced (2));
-            row.learn  .setBounds (r.removeFromLeft (110).reduced (2));
-            row.clear  .setBounds (r.removeFromLeft (40).reduced (2));
+            juce::Rectangle<int> r (0, s * rowH, w, rowH);
+            r.reduce (2, 2);
+            row.name   .setBounds (r.removeFromLeft (180));
+            row.binding.setBounds (r.removeFromLeft (90));
+            row.learn  .setBounds (r.removeFromLeft (110));
+            row.clear  .setBounds (r.removeFromLeft (40));
         }
     }
 
 private:
     void timerCallback() override
     {
-        // moniteur : dernier contrôle reçu
         const int code = engine.getLastMidiCode();
         const int val  = engine.getLastMidiValue();
-        monitor.setText (code < 0   ? juce::String ("Dernier recu : -")
+        monitor.setText (code < 0     ? juce::String ("Dernier recu : -")
                        : code >= 1000 ? "Dernier recu : CC " + juce::String (code - 1000)
                                         + " = " + juce::String (val)
                                       : "Dernier recu : Note " + juce::String (code)
@@ -86,13 +96,12 @@ private:
                          juce::dontSendNotification);
 
         const int learning = engine.getLearnSlot();
-
         for (int s = 0; s < numSlots; ++s)
         {
-            const int code = engine.getBindingCode (s);
-            juce::String t = code < 0 ? juce::String ("-")
-                           : code >= 1000 ? "CC " + juce::String (code - 1000)
-                                          : "Note " + juce::String (code);
+            const int code2 = engine.getBindingCode (s);
+            juce::String t = code2 < 0     ? juce::String ("-")
+                           : code2 >= 1000 ? "CC " + juce::String (code2 - 1000)
+                                           : "Note " + juce::String (code2);
             rows[(size_t) s].binding.setText (t, juce::dontSendNotification);
             rows[(size_t) s].learn.setButtonText (learning == s ? "...ecoute" : "Apprendre");
         }
@@ -106,11 +115,15 @@ private:
         juce::TextButton clear;
     };
 
-    static constexpr int numSlots = 19;
+    static constexpr int numSlots    = 29;
+    static constexpr int rowH        = 30;
+    static constexpr int visibleRows = 12; // au-delà : défilement
 
-    AudioEngine& engine;
-    juce::Label  header;
-    juce::Label  monitor;
+    AudioEngine&   engine;
+    juce::Label    header;
+    juce::Label    monitor;
+    juce::Viewport viewport;
+    juce::Component list;
     std::array<Row, numSlots> rows;
 
     const std::array<const char*, numSlots> slotNames {
@@ -119,7 +132,11 @@ private:
         "Piste suivante", "Piste precedente",
         "Mesures (piste active)", "BPM (tempo)",
         "Volume piste 1", "Volume piste 2", "Volume piste 3", "Volume piste 4",
-        "Volume piste 5", "Volume piste 6", "Volume piste 7", "Volume piste 8"
+        "Volume piste 5", "Volume piste 6", "Volume piste 7", "Volume piste 8",
+        "Mute (piste active)",
+        "Mute piste 1", "Mute piste 2", "Mute piste 3", "Mute piste 4",
+        "Mute piste 5", "Mute piste 6", "Mute piste 7", "Mute piste 8",
+        "Editeur (piste active)"
     };
 };
 

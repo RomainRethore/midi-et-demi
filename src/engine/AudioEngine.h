@@ -52,6 +52,9 @@ public:
     int  getLastMidiCode() const noexcept  { return lastMidiCode.load(); }
     int  getLastMidiValue() const noexcept { return lastMidiValue.load(); }
 
+    /** Consommé par l'UI : une action mappée a demandé d'ouvrir l'éditeur. */
+    bool consumeOpenEditor() noexcept { return openEditorRequested.exchange (false); }
+
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override {}
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
@@ -91,6 +94,7 @@ private:
     std::array<std::atomic<int>, med::MidiMap::numSlots> publishedSig;
     std::atomic<int>    lastMidiCode     { -1 };
     std::atomic<int>    lastMidiValue    { 0 };
+    std::atomic<bool>   openEditorRequested { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
@@ -141,6 +145,7 @@ public:
     int  getBindingCode (int slot) const noexcept { return source.getBindingCode (slot); }
     int  getLastMidiCode() const noexcept     { return source.getLastMidiCode(); }
     int  getLastMidiValue() const noexcept    { return source.getLastMidiValue(); }
+    bool consumeOpenEditorRequest() noexcept  { return source.consumeOpenEditor(); }
 
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }
