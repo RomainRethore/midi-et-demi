@@ -118,6 +118,24 @@ int main()
         check (foundOff, "note-off bouclé @0.5 dans la fenetre");
     }
 
+    // --- contrôles continus (molette de modulation) ----------------------
+    {
+        LoopClip clip; clip.setLengthBeats (4.0);
+        const uint8_t mod[3] = { 0xB0, 1, 64 }; // CC1 = molette de modulation
+        clip.addControl (0.5, mod, 3);
+        clip.addControl (2.5, mod, 3);
+
+        int countIn = 0;
+        clip.emitControlsWindow (0.0, 1.0, [&] (const med::CtrlEvent&, double) { ++countIn; });
+        check (countIn == 1, "1 controle dans [0,1)");
+
+        // clear() doit aussi vider les contrôles
+        clip.clear();
+        int countAfter = 0;
+        clip.emitControlsWindow (0.0, 4.0, [&] (const med::CtrlEvent&, double) { ++countAfter; });
+        check (countAfter == 0, "clear() vide aussi les controles");
+    }
+
     std::cout << "\n" << (testsRun - testsFailed) << "/" << testsRun << " tests OK\n";
     if (testsFailed > 0) { std::cout << testsFailed << " test(s) en echec.\n"; return 1; }
     std::cout << "Tous les tests passent.\n";

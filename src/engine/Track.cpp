@@ -18,7 +18,8 @@ void Track::prepare (double sampleRate, int blockSize)
     currentBlockSize  = blockSize;
 
     synth.setCurrentPlaybackSampleRate (sampleRate);
-    clip.reserve (med::LoopClip::maxNotes); // capacité fixe => pas de réallocation
+    clip.reserve (med::LoopClip::maxNotes);           // capacité fixe => pas de réallocation
+    clip.reserveControls (med::LoopClip::maxControls);
     trackBuffer.setSize (2, blockSize, false, false, true);
 
     const juce::ScopedLock sl (pluginLock);
@@ -169,6 +170,12 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
                     noteHeld[ch - 1][p] = false;
                 }
             }
+            else if (msg.isController() || msg.isPitchWheel())
+            {
+                // molette de modulation, pitch bend... -> flux de contrôles bouclé
+                const auto* raw = msg.getRawData();
+                clip.addControl (evBeat, raw, juce::jmin (3, msg.getRawDataSize()));
+            }
         }
     }
 
@@ -177,7 +184,7 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
     combined.addEvents (liveMidi, 0, numSamples, 0);
 
     if ((loopState == LoopState::Playing || loopState == LoopState::Recording)
-        && ! clip.isEmpty() && L > 0.0 && spb > 0.0)
+        && L > 0.0 && spb > 0.0)
     {
         const double loopLocalStart = std::fmod (linStart, L);
         const double to             = loopLocalStart + deltaBeats;
@@ -187,30 +194,37 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
             int off = (int) (offsetBeats * spb + 0.5);
             return juce::jlimit (0, numSamples - 1, off);
         };
-        auto onFn  = [&] (const med::Note& n, double offBeats)
+        auto onFn   = [&] (const med::Note& n, double o)
         {
             combined.addEvent (juce::MidiMessage::noteOn (n.channel, n.pitch,
-                                                          (juce::uint8) n.velocity),
-                               toOffset (offBeats));
+                                                          (juce::uint8) n.velocity), toOffset (o));
         };
-        auto offFn = [&] (const med::Note& n, double offBeats)
+        auto offFn  = [&] (const med::Note& n, double o)
         {
-            combined.addEvent (juce::MidiMessage::noteOff (n.channel, n.pitch),
-                               toOffset (offBeats));
+            combined.addEvent (juce::MidiMessage::noteOff (n.channel, n.pitch), toOffset (o));
+        };
+        auto ctrlFn = [&] (const med::CtrlEvent& c, double o)
+        {
+            if (c.numBytes > 0)
+                combined.addEvent (juce::MidiMessage (c.bytes, c.numBytes), toOffset (o));
         };
 
         if (to <= L)
         {
             clip.emitWindow (loopLocalStart, to, onFn, offFn);
+            clip.emitControlsWindow (loopLocalStart, to, ctrlFn);
         }
         else
         {
-            clip.emitWindow (loopLocalStart, L, onFn, offFn);
             const double rem  = to - L;
             const double base = L - loopLocalStart;
+            clip.emitWindow (loopLocalStart, L, onFn, offFn);
+            clip.emitControlsWindow (loopLocalStart, L, ctrlFn);
             clip.emitWindow (0.0, rem,
                              [&] (const med::Note& n, double o) { onFn (n, base + o); },
                              [&] (const med::Note& n, double o) { offFn (n, base + o); });
+            clip.emitControlsWindow (0.0, rem,
+                                     [&] (const med::CtrlEvent& c, double o) { ctrlFn (c, base + o); });
         }
     }
 

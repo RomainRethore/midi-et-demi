@@ -18,6 +18,15 @@ struct Note
     uint8_t velocity    = 0;
 };
 
+/** Un message de contrôle continu enregistré (molette de modulation, pitch
+    bend...), positionné en temps. Stocké comme MIDI brut (jusqu'à 3 octets). */
+struct CtrlEvent
+{
+    double  beat = 0.0;
+    uint8_t bytes[3] = { 0, 0, 0 };
+    int     numBytes = 0;
+};
+
 /**
     Boucle MIDI PURE (sans JUCE), stockée PAR NOTE.
 
@@ -28,14 +37,16 @@ struct Note
 class LoopClip
 {
 public:
-    static constexpr std::size_t maxNotes = 20000;
+    static constexpr std::size_t maxNotes    = 20000;
+    static constexpr std::size_t maxControls = 50000;
 
     void   setLengthBeats (double l) noexcept { lengthBeats = (l > 0.0 ? l : 0.0); }
     double getLengthBeats() const noexcept    { return lengthBeats; }
 
-    void reserve (std::size_t n) { notes.reserve (n); }
+    void reserve (std::size_t n)         { notes.reserve (n); }
+    void reserveControls (std::size_t n) { controls.reserve (n); }
 
-    void clear() noexcept { notes.clear(); usedCount = 0; }
+    void clear() noexcept { notes.clear(); usedCount = 0; controls.clear(); }
     bool isEmpty() const noexcept { return usedCount == 0; }
     std::size_t size() const noexcept { return usedCount; }
     std::size_t getUsedCount() const noexcept { return usedCount; }
@@ -64,6 +75,29 @@ public:
 
     const std::vector<Note>& getNotes() const noexcept { return notes; }
 
+    // --- contrôles continus (molette, pitch bend) : enregistrés et bouclés,
+    //     hors du périmètre de l'undo/redo des notes ---
+    void addControl (double beat, const uint8_t* data, int n)
+    {
+        if (controls.size() >= maxControls)
+            return;
+
+        CtrlEvent c;
+        c.beat     = beat;
+        c.numBytes = (n > 3 ? 3 : (n < 0 ? 0 : n));
+        for (int i = 0; i < c.numBytes; ++i)
+            c.bytes[i] = data[i];
+        controls.push_back (c);
+    }
+
+    template <class Fn>
+    void emitControlsWindow (double from, double to, Fn&& fn) const
+    {
+        for (const auto& c : controls)
+            if (c.beat >= from && c.beat < to)
+                fn (c, c.beat - from);
+    }
+
     /** Émet les note-on / note-off tombant dans la fenêtre [from, to) (sans
         bouclage ; l'appelant découpe la fenêtre). offFn reçoit l'instant de
         relâchement, qui peut tomber ailleurs dans la boucle que le début. */
@@ -87,9 +121,10 @@ public:
     }
 
 private:
-    double            lengthBeats = 0.0;
-    std::vector<Note> notes;
-    std::size_t       usedCount = 0;
+    double                 lengthBeats = 0.0;
+    std::vector<Note>      notes;
+    std::size_t            usedCount = 0;
+    std::vector<CtrlEvent> controls;
 };
 
 } // namespace med

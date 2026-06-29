@@ -106,8 +106,8 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
 3. Sur une piste qui a déjà une boucle, le bouton devient **« Overdub »** :
    il enrichit la boucle (ne la remplace pas).
 4. **Annuler** retire la **dernière note**, **Refaire** la remet (note par note) ;
-   **Effacer** vide la piste. (Seules les notes sont bouclées ; les CC type
-   pédale/mod-wheel restent jouables en direct mais ne sont pas enregistrés.)
+   **Effacer** vide la piste. (Les notes ET la **molette de modulation / pitch
+   bend** sont enregistrées et bouclées.)
 5. Change de piste, charge un autre son, recommence → empile tes pistes.
 
 ### Étape 6 — mapping MIDI
