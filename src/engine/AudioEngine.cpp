@@ -316,6 +316,8 @@ void AudioEngine::start()
     jassert (error.isEmpty());
     juce::ignoreUnused (error);
 
+    loadMapping(); // avant de démarrer l'audio (pose les associations sans concurrence)
+
     sourcePlayer.setSource (&source);
     deviceManager.addAudioCallback (&sourcePlayer);
 
@@ -380,4 +382,53 @@ void AudioEngine::handleIncomingMidiMessage (juce::MidiInput* /*midiSource*/,
                                              const juce::MidiMessage& message)
 {
     source.getMidiCollector()->addMessageToQueue (message);
+}
+
+//==============================================================================
+// Persistance du mapping (fichier global)
+//==============================================================================
+static juce::File getMappingFile()
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+                   .getChildFile ("Midi et demi");
+    dir.createDirectory();
+    return dir.getChildFile ("mapping.json");
+}
+
+void AudioEngine::saveMapping()
+{
+    auto* obj = new juce::DynamicObject();
+    for (int s = 0; s < med::MidiMap::numSlots; ++s)
+    {
+        const int code = source.getBindingCode (s);
+        if (code >= 0)
+            obj->setProperty ("s" + juce::String (s), code);
+    }
+
+    getMappingFile().replaceWithText (juce::JSON::toString (juce::var (obj)));
+}
+
+void AudioEngine::loadMapping()
+{
+    auto file = getMappingFile();
+    if (! file.existsAsFile())
+        return;
+
+    auto parsed = juce::JSON::parse (file.loadFileAsString());
+    auto* obj = parsed.getDynamicObject();
+    if (obj == nullptr)
+        return;
+
+    for (int s = 0; s < med::MidiMap::numSlots; ++s)
+    {
+        auto v = obj->getProperty ("s" + juce::String (s));
+        if (! v.isInt())
+            continue;
+
+        const int code = (int) v;
+        med::Ctrl c;
+        if (code >= 1000) { c.type = med::CtrlType::CC;   c.number = code - 1000; }
+        else              { c.type = med::CtrlType::Note; c.number = code; }
+        source.bindDirect (s, c);
+    }
 }

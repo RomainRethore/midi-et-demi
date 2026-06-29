@@ -49,6 +49,10 @@ public:
     void clearBinding (int slot) noexcept { clearBindingSlot.store (slot); }
     int  getBindingCode (int slot) const noexcept { return publishedSig[(size_t) slot].load(); }
 
+    /** Pose une association directement (à n'appeler que hors fil audio,
+        ex. au chargement avant le démarrage de l'audio). */
+    void bindDirect (int slot, med::Ctrl c) { midiMap.bind (slot, c); republishMap(); }
+
     // moniteur : dernier contrôle reçu (code : -1 aucun, >=1000 CC, sinon Note)
     int  getLastMidiCode() const noexcept  { return lastMidiCode.load(); }
     int  getLastMidiValue() const noexcept { return lastMidiValue.load(); }
@@ -149,6 +153,10 @@ public:
     int  getLastMidiCode() const noexcept     { return source.getLastMidiCode(); }
     int  getLastMidiValue() const noexcept    { return source.getLastMidiValue(); }
     bool consumeOpenEditorRequest() noexcept  { return source.consumeOpenEditor(); }
+
+    /** Persistance du mapping (fichier global, indépendant des sessions). */
+    void saveMapping();
+    void loadMapping();
 
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }

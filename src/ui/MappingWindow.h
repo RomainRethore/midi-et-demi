@@ -53,6 +53,9 @@ public:
         viewport.setScrollBarsShown (true, false);
         addAndMakeVisible (viewport);
 
+        for (int s = 0; s < numSlots; ++s) // état initial (mapping déjà chargé)
+            lastCodes[(size_t) s] = engine.getBindingCode (s);
+
         setSize (520, 20 + 32 + 26 + 4 + visibleRows * rowH);
         startTimerHz (15);
     }
@@ -96,6 +99,7 @@ private:
                          juce::dontSendNotification);
 
         const int learning = engine.getLearnSlot();
+        bool changed = false;
         for (int s = 0; s < numSlots; ++s)
         {
             const int code2 = engine.getBindingCode (s);
@@ -104,7 +108,12 @@ private:
                                            : "Note " + juce::String (code2);
             rows[(size_t) s].binding.setText (t, juce::dontSendNotification);
             rows[(size_t) s].learn.setButtonText (learning == s ? "...ecoute" : "Apprendre");
+
+            if (code2 != lastCodes[(size_t) s]) { lastCodes[(size_t) s] = code2; changed = true; }
         }
+
+        if (changed) // une association a bougé -> on sauvegarde le mapping global
+            engine.saveMapping();
     }
 
     struct Row
@@ -125,6 +134,7 @@ private:
     juce::Viewport viewport;
     juce::Component list;
     std::array<Row, numSlots> rows;
+    std::array<int, numSlots>  lastCodes {};
 
     const std::array<const char*, numSlots> slotNames {
         "Lecture / Stop", "Enregistrer", "Effacer", "Annuler (undo)", "Refaire (redo)",
