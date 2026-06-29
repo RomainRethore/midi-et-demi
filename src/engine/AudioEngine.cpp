@@ -51,6 +51,13 @@ void EngineAudioSource::stopCapture()
     threadedWriter.reset(); // vide le tampon + ferme le fichier
 }
 
+void EngineAudioSource::setPreviewBuffer (juce::AudioBuffer<float>&& buf)
+{
+    const juce::ScopedLock sl (previewLock);
+    previewBuffer = std::move (buf);
+    previewPos.store (previewBuffer.getNumSamples() > 0 ? 0 : -1);
+}
+
 void EngineAudioSource::republishMap()
 {
     for (int s = 0; s < med::MidiMap::numSlots; ++s)
@@ -316,6 +323,25 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         }
     }
 
+    // 6c) Pré-écoute (audition d'un sample) — APRÈS la capture (donc hors export).
+    {
+        const juce::ScopedTryLock stl (previewLock);
+        if (stl.isLocked())
+        {
+            int pos = previewPos.load();
+            if (pos >= 0 && pos < previewBuffer.getNumSamples())
+            {
+                const int n = juce::jmin (numSamples, previewBuffer.getNumSamples() - pos);
+                for (int ch = 0; ch < numCh; ++ch)
+                    bufferToFill.buffer->addFrom (ch, startSample, previewBuffer,
+                                                  juce::jmin (ch, previewBuffer.getNumChannels() - 1),
+                                                  pos, n);
+                pos += n;
+                previewPos.store (pos >= previewBuffer.getNumSamples() ? -1 : pos);
+            }
+        }
+    }
+
     // 7) Métronome : déclenchement sur les temps entiers (en temps musical,
     //    donc insensible aux changements de tempo — pas de saut).
     const bool metroOn = metronomeEnabled.load();
@@ -376,6 +402,45 @@ juce::String AudioEngine::getActiveTrackSampleName (int pad)
 int AudioEngine::getActiveTrackPadBase()
 {
     return source.getTrack (source.getActiveTrack()).getPadBaseNote();
+}
+
+void AudioEngine::previewSample (const juce::File& file)
+{
+    double sr = 44100.0;
+    if (auto* dev = deviceManager.getCurrentAudioDevice())
+        sr = dev->getCurrentSampleRate();
+
+    std::unique_ptr<juce::AudioFormatReader> reader (sampleFormatManager.createReaderFor (file));
+    if (reader == nullptr)
+        return;
+
+    const int inLen = (int) juce::jmin ((juce::int64) reader->lengthInSamples,
+                                        (juce::int64) (reader->sampleRate * 10.0)); // max 10 s
+    if (inLen <= 0)
+        return;
+
+    juce::AudioBuffer<float> in (2, inLen);
+    reader->read (&in, 0, inLen, 0, true, true);
+
+    const double ratio = reader->sampleRate / sr; // échantillons d'entrée par échantillon de sortie
+    juce::AudioBuffer<float> out;
+
+    if (std::abs (ratio - 1.0) < 1.0e-6)
+    {
+        out = in;
+    }
+    else
+    {
+        const int outLen = (int) ((double) inLen / ratio);
+        out.setSize (2, juce::jmax (1, outLen));
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            juce::LagrangeInterpolator interp;
+            interp.process (ratio, in.getReadPointer (ch), out.getWritePointer (ch), out.getNumSamples());
+        }
+    }
+
+    source.setPreviewBuffer (std::move (out));
 }
 
 void AudioEngine::triggerActivePad (int pad)

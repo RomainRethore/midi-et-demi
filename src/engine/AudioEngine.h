@@ -69,6 +69,10 @@ public:
     void stopCapture();
     bool isCapturing() const noexcept { return capturingFlag.load(); }
 
+    // --- pré-écoute (audition d'un buffer one-shot, hors export) ---
+    void setPreviewBuffer (juce::AudioBuffer<float>&& buf);
+    void stopPreview() noexcept { previewPos.store (-1); }
+
     ~EngineAudioSource() override;
 
 private:
@@ -116,6 +120,11 @@ private:
     juce::CriticalSection  writerLock;
     std::atomic<bool>      capturingFlag { false };
 
+    // --- pré-écoute ---
+    juce::AudioBuffer<float> previewBuffer;
+    std::atomic<int>         previewPos { -1 };
+    juce::CriticalSection    previewLock;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
 
@@ -147,6 +156,10 @@ public:
     int  getActiveTrackPadBase();
     /** Joue le sample du pad sur la piste active (pré-écoute). */
     void triggerActivePad (int pad);
+
+    /** Pré-écoute d'un fichier audio quelconque (navigateur de samples). */
+    void previewSample (const juce::File& file);
+    void stopPreview() { source.stopPreview(); }
 
     // --- transport ---
     void   setTempo (double bpm) noexcept         { source.setTempo (bpm); }

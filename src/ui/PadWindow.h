@@ -3,23 +3,16 @@
 #include <JuceHeader.h>
 #include <array>
 #include "engine/AudioEngine.h"
-
-namespace
-{
-    inline bool isAudioFile (const juce::String& path)
-    {
-        auto p = path.toLowerCase();
-        return p.endsWith (".wav") || p.endsWith (".aif") || p.endsWith (".aiff")
-            || p.endsWith (".flac") || p.endsWith (".ogg");
-    }
-}
+#include "ui/SampleBrowser.h"
 
 /**
-    Une ligne de pad : nom du pad (+ note), sample assigné, boutons Jouer /
-    Charger / X, et **cible de glisser-déposer** (dépose un fichier audio dessus).
+    Une ligne de pad : nom (+ note), sample assigné, boutons Jouer / Charger / X.
+    Cible de glisser-déposer DOUBLE : fichiers du Finder (FileDragAndDropTarget)
+    ET glisser interne depuis le navigateur (DragAndDropTarget).
 */
 class PadRow : public juce::Component,
-               public juce::FileDragAndDropTarget
+               public juce::FileDragAndDropTarget,
+               public juce::DragAndDropTarget
 {
 public:
     PadRow (AudioEngine& e, int padIndex) : engine (e), pad (padIndex)
@@ -51,33 +44,35 @@ public:
         sample.setText (n.isNotEmpty() ? n : juce::String ("(vide)"), juce::dontSendNotification);
     }
 
-    // --- FileDragAndDropTarget ---
+    void assign (const juce::String& path)
+    {
+        if (medui::isAudioFile (path))
+            engine.loadSampleToActiveTrack (pad, juce::File (path));
+    }
+
+    // --- fichiers du Finder ---
     bool isInterestedInFileDrag (const juce::StringArray& files) override
     {
-        for (auto& f : files)
-            if (isAudioFile (f))
-                return true;
+        for (auto& f : files) if (medui::isAudioFile (f)) return true;
         return false;
     }
-
-    void fileDragEnter (const juce::StringArray&, int, int) override { dragOver = true;  repaint(); }
-    void fileDragExit  (const juce::StringArray&) override           { dragOver = false; repaint(); }
-
+    void fileDragEnter (const juce::StringArray&, int, int) override { setHover (true); }
+    void fileDragExit  (const juce::StringArray&) override           { setHover (false); }
     void filesDropped (const juce::StringArray& files, int, int) override
     {
-        dragOver = false;
-        repaint();
-        for (auto& f : files)
-            if (isAudioFile (f))
-            {
-                engine.loadSampleToActiveTrack (pad, juce::File (f));
-                break; // un sample par pad
-            }
+        setHover (false);
+        for (auto& f : files) if (medui::isAudioFile (f)) { assign (f); break; }
     }
+
+    // --- glisser interne (navigateur) ---
+    bool isInterestedInDragSource (const SourceDetails& d) override { return d.description.isString(); }
+    void itemDragEnter (const SourceDetails&) override { setHover (true); }
+    void itemDragExit  (const SourceDetails&) override { setHover (false); }
+    void itemDropped (const SourceDetails& d) override { setHover (false); assign (d.description.toString()); }
 
     void paint (juce::Graphics& g) override
     {
-        if (dragOver)
+        if (hover)
         {
             g.setColour (juce::Colours::yellow.withAlpha (0.25f));
             g.fillRect (getLocalBounds());
@@ -87,34 +82,36 @@ public:
     void resized() override
     {
         auto r = getLocalBounds().reduced (2);
-        name      .setBounds (r.removeFromLeft (130));
-        clearButton.setBounds (r.removeFromRight (34));
-        loadButton .setBounds (r.removeFromRight (84));
-        playButton .setBounds (r.removeFromRight (70));
+        name      .setBounds (r.removeFromLeft (128));
+        clearButton.setBounds (r.removeFromRight (32));
+        loadButton .setBounds (r.removeFromRight (80));
+        playButton .setBounds (r.removeFromRight (64));
         sample     .setBounds (r);
     }
 
 private:
+    void setHover (bool h) { if (h != hover) { hover = h; repaint(); } }
+
     AudioEngine&     engine;
     int              pad;
     juce::Label      name, sample;
     juce::TextButton playButton, loadButton, clearButton;
-    bool             dragOver = false;
+    bool             hover = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PadRow)
 };
 
-/** Panneau des 16 pads de la piste active. */
+/** Panneau des 16 pads (gauche) + navigateur de samples (droite). */
 class PadContent : public juce::Component,
+                   public juce::DragAndDropContainer,
                    private juce::Timer
 {
 public:
     explicit PadContent (AudioEngine& e) : engine (e)
     {
         addAndMakeVisible (header);
-        header.setText ("Depose un fichier audio sur un pad, ou charge-en plusieurs. "
-                        "(Apercu : barre espace dans le selecteur, ou bouton Jouer.)",
-                        juce::dontSendNotification);
+        header.setText ("Glisse un sample (Finder ou navigateur) sur un pad. "
+                        "Clic dans le navigateur = ecoute.", juce::dontSendNotification);
 
         addAndMakeVisible (baseLabel);
         baseLabel.setText ("Note pad 1", juce::dontSendNotification);
@@ -137,12 +134,13 @@ public:
             rows[(size_t) p]->onChoose = [this] (int pad) { chooseOne (pad); };
             list.addAndMakeVisible (*rows[(size_t) p]);
         }
-
         viewport.setViewedComponent (&list, false);
         viewport.setScrollBarsShown (true, false);
         addAndMakeVisible (viewport);
 
-        setSize (520, 20 + 30 + 32 + 4 + 12 * rowH);
+        addAndMakeVisible (browser);
+
+        setSize (900, 560);
         startTimerHz (8);
     }
 
@@ -151,19 +149,25 @@ public:
     void resized() override
     {
         auto area = getLocalBounds().reduced (10);
-        header.setBounds (area.removeFromTop (30));
+        header.setBounds (area.removeFromTop (28));
 
         auto baseRow = area.removeFromTop (32);
         baseLabel  .setBounds (baseRow.removeFromLeft (90).reduced (2));
         baseSlider .setBounds (baseRow.removeFromLeft (160).reduced (2));
         multiButton.setBounds (baseRow.removeFromRight (180).reduced (2));
-        area.removeFromTop (4);
+        area.removeFromTop (6);
 
-        viewport.setBounds (area);
+        auto left = area.removeFromLeft (area.getWidth() / 2 - 5);
+        area.removeFromLeft (10);
+        auto right = area;
+
+        viewport.setBounds (left);
         const int w = viewport.getMaximumVisibleWidth();
         list.setSize (w, numPads * rowH);
         for (int p = 0; p < numPads; ++p)
             rows[(size_t) p]->setBounds (0, p * rowH, w, rowH);
+
+        browser.setBounds (right);
     }
 
 private:
@@ -213,17 +217,18 @@ private:
     static constexpr int numPads = 16;
     static constexpr int rowH    = 30;
 
-    AudioEngine&   engine;
-    juce::Label    header, baseLabel;
-    juce::Slider   baseSlider;
+    AudioEngine&     engine;
+    juce::Label      header, baseLabel;
+    juce::Slider     baseSlider;
     juce::TextButton multiButton;
-    juce::Viewport viewport;
-    juce::Component list;
+    juce::Viewport   viewport;
+    juce::Component  list;
     std::array<std::unique_ptr<PadRow>, numPads> rows;
+    SampleBrowser    browser { engine };
     std::unique_ptr<juce::FileChooser> fileChooser;
 };
 
-/** Fenêtre flottante contenant le panneau des pads. */
+/** Fenêtre flottante contenant le panneau des pads + navigateur. */
 class PadWindow : public juce::DocumentWindow
 {
 public:
