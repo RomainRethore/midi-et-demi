@@ -98,6 +98,8 @@ public:
                 fn (c, c.beat - from);
     }
 
+    const std::vector<CtrlEvent>& getControls() const noexcept { return controls; }
+
     /** Émet les note-on / note-off tombant dans la fenêtre [from, to) (sans
         bouclage ; l'appelant découpe la fenêtre). offFn reçoit l'instant de
         relâchement, qui peut tomber ailleurs dans la boucle que le début. */

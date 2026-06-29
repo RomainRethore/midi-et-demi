@@ -350,7 +350,9 @@ juce::String AudioEngine::loadPluginToActiveTrack (const juce::File& file)
         return errorMessage.isNotEmpty() ? errorMessage
                                          : juce::String ("Echec du chargement du plugin.");
 
-    source.getTrack (source.getActiveTrack()).setPlugin (std::move (instance));
+    const int active = source.getActiveTrack();
+    source.getTrack (active).setPlugin (std::move (instance));
+    trackPluginPath[(size_t) active] = file.getFullPathName();
     return {};
 }
 
@@ -431,4 +433,167 @@ void AudioEngine::loadMapping()
         else              { c.type = med::CtrlType::Note; c.number = code; }
         source.bindDirect (s, c);
     }
+}
+
+//==============================================================================
+// Sauvegarde / chargement de session
+//==============================================================================
+bool AudioEngine::saveSession (const juce::File& file)
+{
+    // Audio en pause pendant la lecture de l'état (notamment celui des plugins).
+    deviceManager.removeAudioCallback (&sourcePlayer);
+
+    auto* root = new juce::DynamicObject();
+    root->setProperty ("version", 1);
+    root->setProperty ("bpm", source.getTempo());
+
+    juce::Array<juce::var> tracksArr;
+    for (int t = 0; t < EngineAudioSource::numTracks; ++t)
+    {
+        auto& tr = source.getTrack (t);
+        auto* to = new juce::DynamicObject();
+        to->setProperty ("bars",   tr.getBars());
+        to->setProperty ("volume", (double) tr.getVolume());
+        to->setProperty ("mute",   tr.isMuted());
+
+        double length = 0.0;
+        std::vector<med::Note> notes;
+        std::vector<med::CtrlEvent> controls;
+        tr.getSaveData (length, notes, controls);
+        to->setProperty ("length", length);
+
+        juce::Array<juce::var> notesArr;
+        for (const auto& n : notes)
+        {
+            auto* no = new juce::DynamicObject();
+            no->setProperty ("s", n.startBeat);
+            no->setProperty ("l", n.lengthBeats);
+            no->setProperty ("c", (int) n.channel);
+            no->setProperty ("p", (int) n.pitch);
+            no->setProperty ("v", (int) n.velocity);
+            notesArr.add (juce::var (no));
+        }
+        to->setProperty ("notes", notesArr);
+
+        juce::Array<juce::var> ctrlArr;
+        for (const auto& c : controls)
+        {
+            auto* co = new juce::DynamicObject();
+            co->setProperty ("b", c.beat);
+            juce::Array<juce::var> bytes;
+            for (int i = 0; i < c.numBytes; ++i)
+                bytes.add ((int) c.bytes[i]);
+            co->setProperty ("d", bytes);
+            ctrlArr.add (juce::var (co));
+        }
+        to->setProperty ("controls", ctrlArr);
+
+        if (auto* p = tr.getPlugin(); p != nullptr && trackPluginPath[(size_t) t].isNotEmpty())
+        {
+            auto* po = new juce::DynamicObject();
+            po->setProperty ("path", trackPluginPath[(size_t) t]);
+            juce::MemoryBlock mb;
+            p->getStateInformation (mb);
+            po->setProperty ("state", mb.toBase64Encoding());
+            to->setProperty ("plugin", juce::var (po));
+        }
+
+        tracksArr.add (juce::var (to));
+    }
+    root->setProperty ("tracks", tracksArr);
+
+    const bool ok = file.replaceWithText (juce::JSON::toString (juce::var (root)));
+
+    deviceManager.addAudioCallback (&sourcePlayer);
+    return ok;
+}
+
+bool AudioEngine::loadSession (const juce::File& file)
+{
+    if (! file.existsAsFile())
+        return false;
+
+    auto parsed = juce::JSON::parse (file.loadFileAsString());
+    auto* root = parsed.getDynamicObject();
+    if (root == nullptr)
+        return false;
+
+    double sampleRate = 44100.0;
+    int    blockSize  = 512;
+    if (auto* dev = deviceManager.getCurrentAudioDevice())
+    {
+        sampleRate = dev->getCurrentSampleRate();
+        blockSize  = dev->getCurrentBufferSizeSamples();
+    }
+
+    deviceManager.removeAudioCallback (&sourcePlayer); // mutations en sécurité
+
+    source.setPlaying (false);
+    source.setTempo ((double) root->getProperty ("bpm"));
+
+    if (auto* arr = root->getProperty ("tracks").getArray())
+    {
+        for (int t = 0; t < EngineAudioSource::numTracks && t < arr->size(); ++t)
+        {
+            auto* to = (*arr)[t].getDynamicObject();
+            if (to == nullptr)
+                continue;
+
+            auto& tr = source.getTrack (t);
+            tr.setBars   ((int) to->getProperty ("bars"));
+            tr.setVolume ((float) (double) to->getProperty ("volume"));
+            tr.setMute   ((bool) to->getProperty ("mute"));
+            const double length = (double) to->getProperty ("length");
+
+            std::vector<med::Note> notes;
+            if (auto* na = to->getProperty ("notes").getArray())
+                for (auto& nv : *na)
+                    if (auto* no = nv.getDynamicObject())
+                        notes.push_back ({ (double) no->getProperty ("s"),
+                                           (double) no->getProperty ("l"),
+                                           (uint8_t) (int) no->getProperty ("c"),
+                                           (uint8_t) (int) no->getProperty ("p"),
+                                           (uint8_t) (int) no->getProperty ("v") });
+
+            std::vector<med::CtrlEvent> controls;
+            if (auto* ca = to->getProperty ("controls").getArray())
+                for (auto& cv : *ca)
+                    if (auto* co = cv.getDynamicObject())
+                    {
+                        med::CtrlEvent c;
+                        c.beat = (double) co->getProperty ("b");
+                        if (auto* da = co->getProperty ("d").getArray())
+                        {
+                            c.numBytes = juce::jmin (3, da->size());
+                            for (int i = 0; i < c.numBytes; ++i)
+                                c.bytes[i] = (uint8_t) (int) (*da)[i];
+                        }
+                        controls.push_back (c);
+                    }
+
+            // Plugin : on (ré)instancie + restaure l'état avant de l'attacher.
+            trackPluginPath[(size_t) t] = {};
+            tr.setPlugin (nullptr);
+            if (auto* po = to->getProperty ("plugin").getDynamicObject())
+            {
+                const juce::String path = po->getProperty ("path").toString();
+                juce::String err;
+                auto inst = pluginHost.createFromFile (juce::File (path), sampleRate, blockSize, err);
+                if (inst != nullptr)
+                {
+                    juce::MemoryBlock mb;
+                    if (mb.fromBase64Encoding (po->getProperty ("state").toString()) && mb.getSize() > 0)
+                        inst->setStateInformation (mb.getData(), (int) mb.getSize());
+
+                    trackPluginPath[(size_t) t] = path;
+                    tr.setPlugin (std::move (inst));
+                }
+            }
+
+            tr.loadClip (length, notes, controls);
+        }
+    }
+
+    deviceManager.addAudioCallback (&sourcePlayer);
+    return true;
 }

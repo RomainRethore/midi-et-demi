@@ -47,6 +47,23 @@ public:
         out.assign (n.begin(), n.begin() + (long) clip.getUsedCount());
     }
 
+    /** Export complet pour la sauvegarde de session. */
+    void getSaveData (double& lengthBeats,
+                      std::vector<med::Note>& notes,
+                      std::vector<med::CtrlEvent>& controls) const
+    {
+        lengthBeats = clip.getLengthBeats();
+        const auto& n = clip.getNotes();
+        notes.assign (n.begin(), n.begin() + (long) clip.getUsedCount());
+        const auto& c = clip.getControls();
+        controls.assign (c.begin(), c.end());
+    }
+
+    /** Import complet (au chargement de session). À appeler hors fil audio. */
+    void loadClip (double lengthBeats,
+                   const std::vector<med::Note>& notes,
+                   const std::vector<med::CtrlEvent>& controls);
+
     // --- contrôles UI (atomiques) ---
     void  setVolume (float v) noexcept { volume.store (v); }
     float getVolume() const noexcept   { return volume.load(); }

@@ -126,6 +126,23 @@ void Track::finishRecording()
     allNotesOffPending = true;
 }
 
+void Track::loadClip (double lengthBeats,
+                      const std::vector<med::Note>& notes,
+                      const std::vector<med::CtrlEvent>& controls)
+{
+    clip.clear();
+    clip.setLengthBeats (lengthBeats);
+    for (const auto& n : notes)
+        clip.addNote (n);
+    for (const auto& c : controls)
+        clip.addControl (c.beat, c.bytes, c.numBytes);
+
+    std::memset (noteHeld, 0, sizeof (noteHeld));
+    loopState = (! notes.empty() || ! controls.empty()) ? LoopState::Playing
+                                                        : LoopState::Empty;
+    allNotesOffPending = true;
+}
+
 void Track::renderBlock (const juce::MidiBuffer& liveMidi,
                          double linStart, double deltaBeats, double spb,
                          bool transportPlaying, int numSamples)

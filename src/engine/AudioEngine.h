@@ -158,6 +158,10 @@ public:
     void saveMapping();
     void loadMapping();
 
+    /** Sauvegarde / chargement de session (pistes + son + tempo). */
+    bool saveSession (const juce::File& file);
+    bool loadSession (const juce::File& file);
+
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }
     void   setTrackMute (int i, bool m) noexcept    { source.getTrack (i).setMute (m); }
@@ -181,6 +185,7 @@ private:
     EngineAudioSource        source { keyboardState };
     PluginHost               pluginHost;
     juce::StringArray        openedMidiInputs;
+    std::array<juce::String, EngineAudioSource::numTracks> trackPluginPath;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

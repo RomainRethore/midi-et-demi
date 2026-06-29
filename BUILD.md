@@ -123,8 +123,17 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
 
 > Utilise des **potards / boutons (CC)** : ils ne se confondent jamais avec les
 > touches du clavier. Évite les **pads qui envoient des notes** pour piloter des
-> actions (même n° de note qu'une touche → collision). Le mapping n'est pas
-> encore sauvegardé entre sessions (viendra avec la sauvegarde).
+> actions (même n° de note qu'une touche → collision).
+
+> Le mapping est **sauvegardé automatiquement** (fichier global
+> `~/Library/Application Support/Midi et demi/mapping.json`) et rechargé au démarrage.
+
+### Étape 8 — sauvegarde de session
+- **Enreg. session** / **Ouvrir session** (rangée des pistes) : fichier `.mdemi`.
+- Sauvegarde : tempo + par piste (instrument **et son preset/réglages**, notes,
+  contrôles molette/pitch, volume, mesures). À la réouverture, la session
+  resonne à l'identique (les plugins sont rechargés et restaurés).
+- L'audio se met brièvement en pause pendant save/load (normal).
 
 ---
 

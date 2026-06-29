@@ -5,7 +5,7 @@
 MainComponent::MainComponent()
 {
     addAndMakeVisible (titleLabel);
-    titleLabel.setText ("Midi et demi - mapping MIDI (etape 6)", juce::dontSendNotification);
+    titleLabel.setText ("Midi et demi - sauvegarde de session (etape 8)", juce::dontSendNotification);
     titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centred);
 
@@ -47,6 +47,50 @@ MainComponent::MainComponent()
         b.setButtonText (juce::String (i + 1));
         b.onClick = [this, i] { selectTrack (i); };
     }
+
+    addAndMakeVisible (sessionSaveButton);
+    sessionSaveButton.onClick = [this]
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+        fileChooser = std::make_unique<juce::FileChooser> (
+            "Enregistrer la session", dir.getChildFile ("session.mdemi"), "*.mdemi");
+
+        fileChooser->launchAsync (juce::FileBrowserComponent::saveMode
+                                  | juce::FileBrowserComponent::canSelectFiles
+                                  | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this] (const juce::FileChooser& fc)
+            {
+                auto f = fc.getResult();
+                if (f == juce::File{})
+                    return;
+                if (f.getFileExtension().isEmpty())
+                    f = f.withFileExtension ("mdemi");
+                if (! engine.saveSession (f))
+                    statusLabel.setText ("Echec de la sauvegarde", juce::dontSendNotification);
+            });
+    };
+
+    addAndMakeVisible (sessionOpenButton);
+    sessionOpenButton.onClick = [this]
+    {
+        auto dir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+        fileChooser = std::make_unique<juce::FileChooser> (
+            "Ouvrir une session", dir, "*.mdemi");
+
+        fileChooser->launchAsync (juce::FileBrowserComponent::openMode
+                                  | juce::FileBrowserComponent::canSelectFiles,
+            [this] (const juce::FileChooser& fc)
+            {
+                auto f = fc.getResult();
+                if (f == juce::File{})
+                    return;
+                pluginWindow = nullptr;        // un plugin de la session peut disparaître
+                if (engine.loadSession (f))
+                    selectTrack (0);            // rafraîchit les contrôles de la piste active
+                else
+                    statusLabel.setText ("Echec de l'ouverture", juce::dontSendNotification);
+            });
+    };
 
     // --- contrôles de la piste active ---
     addAndMakeVisible (loadButton);
@@ -152,6 +196,9 @@ void MainComponent::resized()
     tracksLabel.setBounds (trackRow.removeFromLeft (90).reduced (2));
     for (auto& b : trackButtons)
         b.setBounds (trackRow.removeFromLeft (42).reduced (2));
+    trackRow.removeFromLeft (16);
+    sessionSaveButton.setBounds (trackRow.removeFromLeft (130).reduced (2));
+    sessionOpenButton.setBounds (trackRow.removeFromLeft (130).reduced (2));
     area.removeFromTop (8);
 
     auto activeRow1 = area.removeFromTop (38);

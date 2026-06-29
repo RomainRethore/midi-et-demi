@@ -49,6 +49,10 @@ private:
     juce::Label                      tracksLabel { {}, "Piste active" };
     std::array<juce::TextButton, 8>  trackButtons;
 
+    // session
+    juce::TextButton sessionSaveButton { "Enreg. session" };
+    juce::TextButton sessionOpenButton { "Ouvrir session" };
+
     // contrôles de la piste active
     juce::TextButton   loadButton   { "Charger un plugin..." };
     juce::TextButton   editorButton { "Editeur" };
