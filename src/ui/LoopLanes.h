@@ -18,6 +18,16 @@ class LoopLanes : public juce::Component
 public:
     explicit LoopLanes (AudioEngine& e) : engine (e) {}
 
+    /** Appelé quand on clique un couloir (pour sélectionner la piste). */
+    std::function<void(int)> onSelectLane;
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        const float laneH = (float) getHeight() / (float) numLanes;
+        if (laneH > 0.0f && onSelectLane)
+            onSelectLane (juce::jlimit (0, numLanes - 1, (int) (e.position.y / laneH)));
+    }
+
     /** À appeler depuis le timer de l'UI : rafraîchit les copies et redessine. */
     void update()
     {

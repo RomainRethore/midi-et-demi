@@ -167,7 +167,7 @@ MainComponent::MainComponent()
     addAndMakeVisible (loopLanes);
     addAndMakeVisible (keyboard);
 
-    for (auto* gp : { &transportGroup, &instrumentGroup, &sessionGroup, &mixerGroup })
+    for (auto* gp : { &transportGroup, &instrumentGroup, &sessionGroup, &mixerGroup, &loopsGroup })
     {
         addAndMakeVisible (*gp);
         gp->setInterceptsMouseClicks (false, false); // cadre décoratif, laisse passer les clics
@@ -177,12 +177,15 @@ MainComponent::MainComponent()
     instrumentGroup.setText ("Instrument (piste active)");
     sessionGroup   .setText ("Session / fichier");
     mixerGroup     .setText ("Pistes");
+    loopsGroup     .setText ("Boucles");
+
+    loopLanes.onSelectLane = [this] (int i) { selectTrack (i); };
 
     engine.start();
     selectTrack (0);
     startTimerHz (30); // visu fluide de la tete de lecture
 
-    setSize (1280, 820);
+    setSize (1300, 880);
 }
 
 MainComponent::~MainComponent()
@@ -271,13 +274,14 @@ void MainComponent::resized()
     }
     area.removeFromTop (gap);
 
-    // --- Clavier (bas) + visu des boucles (reste) ---
+    // --- Clavier (bas) + visu des boucles (tout le reste, encadré) ---
     if (keyboard.isVisible())
     {
-        keyboard.setBounds (area.removeFromBottom (110));
+        keyboard.setBounds (area.removeFromBottom (100));
         area.removeFromBottom (gap);
     }
-    loopLanes.setBounds (area);
+    loopsGroup.setBounds (area);
+    loopLanes.setBounds (area.reduced (10, 18));
 }
 
 void MainComponent::selectTrack (int index)
