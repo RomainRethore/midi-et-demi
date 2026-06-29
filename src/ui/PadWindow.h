@@ -124,10 +124,6 @@ public:
         baseSlider.setValue (engine.getActiveTrackPadBase(), juce::dontSendNotification);
         baseSlider.onValueChange = [this] { engine.setActiveTrackPadBase ((int) baseSlider.getValue()); };
 
-        addAndMakeVisible (multiButton);
-        multiButton.setButtonText ("Charger plusieurs...");
-        multiButton.onClick = [this] { chooseMany(); };
-
         for (int p = 0; p < numPads; ++p)
         {
             rows[(size_t) p] = std::make_unique<PadRow> (engine, p);
@@ -154,7 +150,6 @@ public:
         auto baseRow = area.removeFromTop (32);
         baseLabel  .setBounds (baseRow.removeFromLeft (90).reduced (2));
         baseSlider .setBounds (baseRow.removeFromLeft (160).reduced (2));
-        multiButton.setBounds (baseRow.removeFromRight (180).reduced (2));
         area.removeFromTop (6);
 
         auto left = area.removeFromLeft (area.getWidth() / 2 - 5);
@@ -196,31 +191,12 @@ private:
             });
     }
 
-    void chooseMany()
-    {
-        fileChooser = std::make_unique<juce::FileChooser> (
-            "Choisir jusqu'a 16 samples (assignes dans l'ordre)",
-            juce::File::getSpecialLocation (juce::File::userMusicDirectory),
-            "*.wav;*.aif;*.aiff;*.flac;*.ogg");
-
-        fileChooser->launchAsync (juce::FileBrowserComponent::openMode
-                                  | juce::FileBrowserComponent::canSelectFiles
-                                  | juce::FileBrowserComponent::canSelectMultipleItems,
-            [this] (const juce::FileChooser& fc)
-            {
-                auto files = fc.getResults();
-                for (int i = 0; i < files.size() && i < numPads; ++i)
-                    engine.loadSampleToActiveTrack (i, files[i]);
-            });
-    }
-
     static constexpr int numPads = 16;
     static constexpr int rowH    = 30;
 
     AudioEngine&     engine;
     juce::Label      header, baseLabel;
     juce::Slider     baseSlider;
-    juce::TextButton multiButton;
     juce::Viewport   viewport;
     juce::Component  list;
     std::array<std::unique_ptr<PadRow>, numPads> rows;

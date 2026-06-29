@@ -44,6 +44,11 @@ public:
         addAndMakeVisible (listBox);
         listBox.setModel (this);
         listBox.setRowHeight (22);
+        listBox.setMultipleSelectionEnabled (true); // Cmd/Maj+clic pour multi-sélection
+
+        addAndMakeVisible (assignButton);
+        assignButton.setButtonText ("Assigner aux pads (1->16)");
+        assignButton.onClick = [this] { assignSelectionToPads(); };
 
         setDirectory (juce::File::getSpecialLocation (juce::File::userMusicDirectory));
     }
@@ -118,10 +123,25 @@ public:
         stopButton  .setBounds (top.removeFromRight (60).reduced (1));
         pathLabel   .setBounds (top.reduced (2));
         a.removeFromTop (4);
+        assignButton.setBounds (a.removeFromBottom (28).reduced (0, 1));
+        a.removeFromBottom (4);
         listBox.setBounds (a);
     }
 
 private:
+    /** Assigne les fichiers sélectionnés (dans l'ordre) aux pads 1..16. */
+    void assignSelectionToPads()
+    {
+        const auto rows = listBox.getSelectedRows();
+        int pad = 0;
+        for (int i = 0; i < rows.size() && pad < 16; ++i)
+        {
+            const int r = rows[i];
+            if (r >= 0 && r < entries.size() && ! entries[r].isDir)
+                engine.loadSampleToActiveTrack (pad++, entries[r].file);
+        }
+    }
+
     void chooseFolder()
     {
         fileChooser = std::make_unique<juce::FileChooser> ("Dossier de samples", currentDir);
@@ -142,7 +162,7 @@ private:
     juce::Array<Entry>  entries;
     juce::ListBox       listBox;
     juce::Label         pathLabel;
-    juce::TextButton    upButton, folderButton, stopButton;
+    juce::TextButton    upButton, folderButton, stopButton, assignButton;
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SampleBrowser)
