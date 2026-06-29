@@ -196,6 +196,13 @@ public:
     int    getTrackBars (int i) noexcept            { return source.getTrack (i).getBars(); }
     int    getTrackLoopState (int i) noexcept       { return source.getTrack (i).getLoopState(); }
     juce::String getTrackPluginName (int i)         { return source.getTrack (i).getPluginName(); }
+    juce::String getTrackInstrumentName (int i)
+    {
+        auto& tr = source.getTrack (i);
+        if (tr.hasSamples())          return "Sampler";
+        auto n = tr.getPluginName();
+        return n.isNotEmpty() ? n : juce::String ("-");
+    }
     void   getTrackDisplay (int i, std::vector<med::Note>& out, double& lengthBeats)
     {
         source.getTrack (i).getDisplayData (out, lengthBeats);

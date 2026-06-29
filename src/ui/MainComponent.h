@@ -7,6 +7,7 @@
 #include "ui/LoopLanes.h"
 #include "ui/MappingWindow.h"
 #include "ui/PadWindow.h"
+#include "ui/ChannelStrip.h"
 
 /**
     Couche UI (étape 4a). Transport partagé + sélecteur de PISTE ACTIVE (1-8) :
@@ -49,9 +50,8 @@ private:
     juce::ToggleButton metronomeToggle { "Metronome" };
     juce::Label        positionLabel;
 
-    // sélecteur de piste
-    juce::Label                      tracksLabel { {}, "Piste active" };
-    std::array<juce::TextButton, 8>  trackButtons;
+    // table de mixage : 8 voies
+    std::array<std::unique_ptr<ChannelStrip>, 8> strips;
 
     // session + export
     juce::TextButton sessionSaveButton { "Enreg. session" };
@@ -68,9 +68,6 @@ private:
     juce::TextButton   undoButton   { "Annuler" };
     juce::TextButton   redoButton   { "Refaire" };
     juce::TextButton   clearButton  { "Effacer" };
-    juce::Label        volumeLabel  { {}, "Volume" };
-    juce::Slider       volumeSlider;
-    juce::ToggleButton muteToggle   { "Mute" };
     juce::TextButton   mappingButton { "Mapping..." };
     juce::Label        activeInfoLabel;
 

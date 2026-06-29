@@ -39,13 +39,11 @@ MainComponent::MainComponent()
     positionLabel.setJustificationType (juce::Justification::centred);
 
     // --- sélecteur de piste ---
-    addAndMakeVisible (tracksLabel);
-    for (int i = 0; i < (int) trackButtons.size(); ++i)
+    for (int i = 0; i < (int) strips.size(); ++i)
     {
-        auto& b = trackButtons[(size_t) i];
-        addAndMakeVisible (b);
-        b.setButtonText (juce::String (i + 1));
-        b.onClick = [this, i] { selectTrack (i); };
+        strips[(size_t) i] = std::make_unique<ChannelStrip> (engine, i);
+        strips[(size_t) i]->onSelect = [this] (int idx) { selectTrack (idx); };
+        addAndMakeVisible (*strips[(size_t) i]);
     }
 
     addAndMakeVisible (sessionSaveButton);
@@ -155,24 +153,6 @@ MainComponent::MainComponent()
     addAndMakeVisible (clearButton);
     clearButton.onClick = [this] { engine.pressClear(); };
 
-    addAndMakeVisible (volumeLabel);
-    volumeLabel.setJustificationType (juce::Justification::centredRight);
-
-    addAndMakeVisible (volumeSlider);
-    volumeSlider.setSliderStyle (juce::Slider::LinearHorizontal);
-    volumeSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 60, 24);
-    volumeSlider.setRange (0.0, 1.0, 0.01);
-    volumeSlider.onValueChange = [this]
-    {
-        engine.setTrackVolume (engine.getActiveTrack(), (float) volumeSlider.getValue());
-    };
-
-    addAndMakeVisible (muteToggle);
-    muteToggle.onClick = [this]
-    {
-        engine.setTrackMute (engine.getActiveTrack(), muteToggle.getToggleState());
-    };
-
     addAndMakeVisible (mappingButton);
     mappingButton.onClick = [this]
     {
@@ -263,32 +243,31 @@ void MainComponent::resized()
     }
     area.removeFromTop (gap);
 
-    // --- Zone MIXER (sélecteur de pistes + actions de la piste active) ---
+    // --- Zone MIXER : 8 voies + bandeau "piste active" ---
     {
-        auto zone = area.removeFromTop (130);
+        auto zone = area.removeFromTop (250);
         mixerGroup.setBounds (zone);
         auto m = zone.reduced (12, 18);
 
-        auto trackRow = m.removeFromTop (34);
-        tracksLabel.setBounds (trackRow.removeFromLeft (90).reduced (2));
-        for (auto& b : trackButtons)
-            b.setBounds (trackRow.removeFromLeft (44).reduced (2));
-        m.removeFromTop (6);
+        // bandeau d'actions de la piste active (en bas de la zone)
+        auto activeRow = m.removeFromBottom (34);
+        barsLabel   .setBounds (activeRow.removeFromLeft (66).reduced (2));
+        barsCombo   .setBounds (activeRow.removeFromLeft (60).reduced (2));
+        recordButton.setBounds (activeRow.removeFromLeft (130).reduced (2));
+        undoButton  .setBounds (activeRow.removeFromLeft (90).reduced (2));
+        redoButton  .setBounds (activeRow.removeFromLeft (90).reduced (2));
+        clearButton .setBounds (activeRow.removeFromLeft (90).reduced (2));
+        activeInfoLabel.setBounds (activeRow.reduced (4, 2));
+        m.removeFromBottom (6);
 
-        auto activeRow1 = m.removeFromTop (34);
-        barsLabel   .setBounds (activeRow1.removeFromLeft (66).reduced (2));
-        barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
-        recordButton.setBounds (activeRow1.removeFromLeft (130).reduced (2));
-        undoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
-        redoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
-        clearButton .setBounds (activeRow1.removeFromLeft (90).reduced (2));
-        m.removeFromTop (6);
-
-        auto activeRow2 = m.removeFromTop (30);
-        volumeLabel .setBounds (activeRow2.removeFromLeft (66).reduced (2));
-        volumeSlider.setBounds (activeRow2.removeFromLeft (240).reduced (2));
-        muteToggle  .setBounds (activeRow2.removeFromLeft (90).reduced (2));
-        activeInfoLabel.setBounds (activeRow2.reduced (2));
+        // les 8 voies, réparties sur la largeur
+        const int n = (int) strips.size();
+        const int stripW = m.getWidth() / n;
+        for (int i = 0; i < n; ++i)
+        {
+            auto col = (i < n - 1) ? m.removeFromLeft (stripW) : m; // dernière voie = reste
+            strips[(size_t) i]->setBounds (col.reduced (3));
+        }
     }
     area.removeFromTop (gap);
 
@@ -311,8 +290,6 @@ void MainComponent::refreshActiveControls()
 {
     const int active = engine.getActiveTrack();
     barsCombo.setSelectedId (engine.getTrackBars (active), juce::dontSendNotification);
-    volumeSlider.setValue (engine.getTrackVolume (active), juce::dontSendNotification);
-    muteToggle.setToggleState (engine.isTrackMuted (active), juce::dontSendNotification);
 }
 
 void MainComponent::timerCallback()
@@ -337,14 +314,15 @@ void MainComponent::timerCallback()
     const int    state      = engine.getTrackLoopState (active);
     const juce::String name = engine.getTrackPluginName (active);
 
-    // Reflète les potards mappés (volume, BPM, mesures) sur l'UI.
-    if (! volumeSlider.isMouseButtonDown())
-        volumeSlider.setValue (engine.getTrackVolume (active), juce::dontSendNotification);
+    // Reflète les potards mappés (BPM, mesures) sur l'UI (volume/mute = voies).
     if (! bpmSlider.isMouseButtonDown())
         bpmSlider.setValue (engine.getTempo(), juce::dontSendNotification);
     if (barsCombo.getSelectedId() != engine.getTrackBars (active))
         barsCombo.setSelectedId (engine.getTrackBars (active), juce::dontSendNotification);
-    muteToggle.setToggleState (engine.isTrackMuted (active), juce::dontSendNotification);
+
+    // Mise à jour des voies de mixage.
+    for (int i = 0; i < (int) strips.size(); ++i)
+        strips[(size_t) i]->update (i == active);
 
     // Une action mappée a demandé d'ouvrir l'éditeur du plugin de la piste active.
     if (engine.consumeOpenEditorRequest())
@@ -388,19 +366,6 @@ void MainComponent::timerCallback()
                                 getLookAndFeel().findColour (juce::TextButton::buttonColourId));
     }
 
-    // Couleur = état de la boucle ; crochets = piste active.
-    for (int i = 0; i < (int) trackButtons.size(); ++i)
-    {
-        const int st = engine.getTrackLoopState (i);
-        const auto colour = (st == 2) ? juce::Colour (0xffc62828)   // rouge : enregistrement
-                          : (st == 3) ? juce::Colour (0xff2e7d32)   // vert  : a une boucle
-                                      : getLookAndFeel().findColour (juce::TextButton::buttonColourId);
-
-        auto& b = trackButtons[(size_t) i];
-        b.setColour (juce::TextButton::buttonColourId, colour);
-        b.setButtonText (i == active ? ("[" + juce::String (i + 1) + "]")
-                                     : juce::String (i + 1));
-    }
 }
 
 void MainComponent::openPluginFile()
