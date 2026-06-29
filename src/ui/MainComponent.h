@@ -38,6 +38,9 @@ private:
     juce::Label titleLabel;
     juce::Label statusLabel;
 
+    // cadres de zones (R1)
+    juce::GroupComponent transportGroup, instrumentGroup, sessionGroup, mixerGroup;
+
     // transport
     juce::TextButton   playButton   { "Lecture" };
     juce::Slider       bpmSlider;

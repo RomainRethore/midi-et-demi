@@ -5,7 +5,7 @@
 MainComponent::MainComponent()
 {
     addAndMakeVisible (titleLabel);
-    titleLabel.setText ("Midi et demi - export audio (etape 9)", juce::dontSendNotification);
+    titleLabel.setText ("Midi et demi", juce::dontSendNotification);
     titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centred);
 
@@ -187,11 +187,22 @@ MainComponent::MainComponent()
     addAndMakeVisible (loopLanes);
     addAndMakeVisible (keyboard);
 
+    for (auto* gp : { &transportGroup, &instrumentGroup, &sessionGroup, &mixerGroup })
+    {
+        addAndMakeVisible (*gp);
+        gp->setInterceptsMouseClicks (false, false); // cadre décoratif, laisse passer les clics
+        gp->toBack();
+    }
+    transportGroup .setText ("Transport");
+    instrumentGroup.setText ("Instrument (piste active)");
+    sessionGroup   .setText ("Session / fichier");
+    mixerGroup     .setText ("Pistes");
+
     engine.start();
     selectTrack (0);
     startTimerHz (30); // visu fluide de la tete de lecture
 
-    setSize (920, 700);
+    setSize (1280, 820);
 }
 
 MainComponent::~MainComponent()
@@ -210,53 +221,84 @@ void MainComponent::paint (juce::Graphics& g)
 void MainComponent::resized()
 {
     auto area = getLocalBounds().reduced (12);
+    constexpr int gap = 10;
 
-    titleLabel.setBounds (area.removeFromTop (30));
-    statusLabel.setBounds (area.removeFromTop (44));
-    area.removeFromTop (6);
+    titleLabel.setBounds (area.removeFromTop (28));
+    statusLabel.setBounds (area.removeFromTop (40));
+    area.removeFromTop (gap);
 
-    auto transportRow = area.removeFromTop (38);
-    playButton     .setBounds (transportRow.removeFromLeft (90).reduced (2));
-    bpmLabel       .setBounds (transportRow.removeFromLeft (50).reduced (2));
-    bpmSlider      .setBounds (transportRow.removeFromLeft (240).reduced (2));
-    bpmUnitLabel   .setBounds (transportRow.removeFromLeft (40).reduced (2));
-    metronomeToggle.setBounds (transportRow.removeFromLeft (120).reduced (2));
-    positionLabel  .setBounds (transportRow.reduced (2));
-    area.removeFromTop (8);
+    // --- Zone TRANSPORT (jouable) ---
+    {
+        auto zone = area.removeFromTop (62);
+        transportGroup.setBounds (zone);
+        auto r = zone.reduced (12, 18); // marge intérieure (sous le libellé du cadre)
+        playButton     .setBounds (r.removeFromLeft (90).reduced (2));
+        bpmLabel       .setBounds (r.removeFromLeft (50).reduced (2));
+        bpmSlider      .setBounds (r.removeFromLeft (240).reduced (2));
+        bpmUnitLabel   .setBounds (r.removeFromLeft (40).reduced (2));
+        metronomeToggle.setBounds (r.removeFromLeft (120).reduced (2));
+        positionLabel  .setBounds (r.reduced (2));
+    }
+    area.removeFromTop (gap);
 
-    auto trackRow = area.removeFromTop (36);
-    tracksLabel.setBounds (trackRow.removeFromLeft (90).reduced (2));
-    for (auto& b : trackButtons)
-        b.setBounds (trackRow.removeFromLeft (42).reduced (2));
-    trackRow.removeFromLeft (16);
-    sessionSaveButton.setBounds (trackRow.removeFromLeft (130).reduced (2));
-    sessionOpenButton.setBounds (trackRow.removeFromLeft (130).reduced (2));
-    exportButton     .setBounds (trackRow.removeFromLeft (140).reduced (2));
-    area.removeFromTop (8);
+    // --- Zone des blocs SOURIS : Instrument (gauche) + Session (droite) ---
+    {
+        auto zone = area.removeFromTop (70);
+        auto left  = zone.removeFromLeft (zone.getWidth() / 2);
+        auto right = zone;
+        right.removeFromLeft (gap);
 
-    auto activeRow1 = area.removeFromTop (38);
-    loadButton  .setBounds (activeRow1.removeFromLeft (160).reduced (2));
-    editorButton.setBounds (activeRow1.removeFromLeft (80).reduced (2));
-    padsButton  .setBounds (activeRow1.removeFromLeft (80).reduced (2));
-    barsLabel   .setBounds (activeRow1.removeFromLeft (66).reduced (2));
-    barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
-    recordButton.setBounds (activeRow1.removeFromLeft (130).reduced (2));
-    undoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
-    redoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
-    clearButton .setBounds (activeRow1.removeFromLeft (90).reduced (2));
-    area.removeFromTop (6);
+        instrumentGroup.setBounds (left);
+        auto li = left.reduced (12, 18);
+        loadButton  .setBounds (li.removeFromLeft (170).reduced (2));
+        editorButton.setBounds (li.removeFromLeft (90).reduced (2));
+        padsButton  .setBounds (li.removeFromLeft (90).reduced (2));
+        mappingButton.setBounds (li.removeFromLeft (110).reduced (2));
 
-    auto activeRow2 = area.removeFromTop (38);
-    volumeLabel .setBounds (activeRow2.removeFromLeft (70).reduced (2));
-    volumeSlider.setBounds (activeRow2.removeFromLeft (240).reduced (2));
-    muteToggle  .setBounds (activeRow2.removeFromLeft (90).reduced (2));
-    mappingButton.setBounds (activeRow2.removeFromLeft (110).reduced (2));
-    activeInfoLabel.setBounds (activeRow2.reduced (2));
-    area.removeFromTop (8);
+        sessionGroup.setBounds (right);
+        auto ri = right.reduced (12, 18);
+        sessionSaveButton.setBounds (ri.removeFromLeft (140).reduced (2));
+        sessionOpenButton.setBounds (ri.removeFromLeft (140).reduced (2));
+        exportButton     .setBounds (ri.removeFromLeft (150).reduced (2));
+    }
+    area.removeFromTop (gap);
 
-    keyboard.setBounds (area.removeFromBottom (110));
-    area.removeFromBottom (8);
-    loopLanes.setBounds (area); // occupe l'espace restant
+    // --- Zone MIXER (sélecteur de pistes + actions de la piste active) ---
+    {
+        auto zone = area.removeFromTop (130);
+        mixerGroup.setBounds (zone);
+        auto m = zone.reduced (12, 18);
+
+        auto trackRow = m.removeFromTop (34);
+        tracksLabel.setBounds (trackRow.removeFromLeft (90).reduced (2));
+        for (auto& b : trackButtons)
+            b.setBounds (trackRow.removeFromLeft (44).reduced (2));
+        m.removeFromTop (6);
+
+        auto activeRow1 = m.removeFromTop (34);
+        barsLabel   .setBounds (activeRow1.removeFromLeft (66).reduced (2));
+        barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
+        recordButton.setBounds (activeRow1.removeFromLeft (130).reduced (2));
+        undoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
+        redoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
+        clearButton .setBounds (activeRow1.removeFromLeft (90).reduced (2));
+        m.removeFromTop (6);
+
+        auto activeRow2 = m.removeFromTop (30);
+        volumeLabel .setBounds (activeRow2.removeFromLeft (66).reduced (2));
+        volumeSlider.setBounds (activeRow2.removeFromLeft (240).reduced (2));
+        muteToggle  .setBounds (activeRow2.removeFromLeft (90).reduced (2));
+        activeInfoLabel.setBounds (activeRow2.reduced (2));
+    }
+    area.removeFromTop (gap);
+
+    // --- Clavier (bas) + visu des boucles (reste) ---
+    if (keyboard.isVisible())
+    {
+        keyboard.setBounds (area.removeFromBottom (110));
+        area.removeFromBottom (gap);
+    }
+    loopLanes.setBounds (area);
 }
 
 void MainComponent::selectTrack (int index)
