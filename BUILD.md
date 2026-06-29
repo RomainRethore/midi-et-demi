@@ -105,16 +105,15 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
    posé et tu **ajoutes** par-dessus (overdub). **Stop REC** quand tu as fini.
 3. Sur une piste qui a déjà une boucle, le bouton devient **« Overdub »** :
    il enrichit la boucle (ne la remplace pas).
-4. **Annuler passe** retire la dernière couche ; **Effacer** vide la piste.
+4. **Annuler** retire la dernière couche, **Refaire** la remet ; **Effacer** vide la piste.
 5. Change de piste, charge un autre son, recommence → empile tes pistes.
 
 ### Étape 6 — mapping MIDI
 1. Clique **« Mapping… »** : actions disponibles = Lecture/Stop, Enregistrer,
-   Effacer, Annuler, Métronome, **Volume piste active** (potard),
-   **Sélecteur de piste** (potard → piste 1-8), **Piste suivante**,
-   **Piste précédente**, **Mesures piste active** (potard → 1/2/4/8),
-   **BPM** (potard → 40-240), **Volume piste 1-8**, **Mute piste active**,
-   **Mute piste 1-8**, **Éditeur piste active**. Liste défilante + moniteur du
+   Effacer, **Annuler (undo)**, **Refaire (redo)**, Métronome,
+   **Volume piste active** (potard), **Sélecteur de piste** (potard → piste 1-8),
+   **Mesures piste active** (potard → 1/2/4/8), **BPM** (potard → 40-240),
+   **Volume piste 1-8**, **Éditeur piste active**. Liste défilante + moniteur du
    dernier contrôle reçu. Seul le **chargement de plugin** reste à la souris.
 2. Clique **« Apprendre »** sur une action, puis **bouge un potard / bouton**
    de l'Oxygen → l'association s'affiche (« CC n »). Le **X** efface.

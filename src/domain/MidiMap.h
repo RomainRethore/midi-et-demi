@@ -28,7 +28,7 @@ struct Ctrl
 class MidiMap
 {
 public:
-    static constexpr int numSlots = 29;
+    static constexpr int numSlots = 19;
 
     /** Associe le contrôle c au slot. Retire c d'un éventuel autre slot. */
     void bind (int slot, Ctrl c) noexcept

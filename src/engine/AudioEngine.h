@@ -40,6 +40,7 @@ public:
     void pressRecord() noexcept              { recordPressed.store (true); }
     void pressClear() noexcept               { clearPressed.store (true); }
     void pressUndo() noexcept                { undoPressed.store (true); }
+    void pressRedo() noexcept                { redoPressed.store (true); }
 
     // --- mapping MIDI ---
     void startLearn (int slot) noexcept  { learnArmedSlot.store (slot); }
@@ -86,6 +87,7 @@ private:
     std::atomic<bool>   recordPressed      { false };
     std::atomic<bool>   clearPressed       { false };
     std::atomic<bool>   undoPressed        { false };
+    std::atomic<bool>   redoPressed        { false };
 
     // --- mapping (table détenue par le fil audio) ---
     med::MidiMap        midiMap;
@@ -135,6 +137,7 @@ public:
     void pressRecord() noexcept               { source.pressRecord(); }
     void pressClear() noexcept                { source.pressClear(); }
     void pressUndo() noexcept                 { source.pressUndo(); }
+    void pressRedo() noexcept                 { source.pressRedo(); }
 
     // --- mapping MIDI ---
     int  numMappingSlots() const noexcept     { return med::MidiMap::numSlots; }

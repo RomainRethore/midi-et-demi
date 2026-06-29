@@ -19,7 +19,8 @@ void Track::prepare (double sampleRate, int blockSize)
 
     synth.setCurrentPlaybackSampleRate (sampleRate);
     clip.reserve (med::LoopClip::maxEvents); // capacité fixe => pas de réallocation
-    passStarts.reserve (4096);
+    checkpoints.reserve (4096);
+    redoCounts.reserve (4096);
     trackBuffer.setSize (2, blockSize, false, false, true);
 
     const juce::ScopedLock sl (pluginLock);
@@ -60,41 +61,49 @@ void Track::startRecording (double lengthBeats)
     }
 
     std::memset (heldNotes, 0, sizeof (heldNotes));
-    passStarts.clear();
-    passStarts.push_back (clip.size()); // début de la première passe de cette prise
+    checkpoints.clear();
+    checkpoints.push_back (clip.size()); // base de cette prise (protège l'existant)
+    redoCounts.clear();
     loopState = LoopState::Recording;
     allNotesOffPending = true;
 }
 
 void Track::undoLastPass()
 {
-    if (! passStarts.empty())
-    {
-        const std::size_t target = passStarts.back();
-        if (clip.size() > target)
-        {
-            clip.truncate (target);            // enlève la passe en cours
-        }
-        else if (passStarts.size() > 1)
-        {
-            passStarts.pop_back();
-            clip.truncate (passStarts.back()); // enlève la passe précédente
-        }
-        else
-        {
-            clip.truncate (0);
-        }
-    }
-    else
-    {
-        clip.clear();
-    }
+    const std::size_t cur = clip.size();
+
+    // On retire les bornes "vides" en queue (>= taille actuelle), en gardant la base.
+    while (checkpoints.size() > 1 && checkpoints.back() >= cur)
+        checkpoints.pop_back();
+
+    const std::size_t target = checkpoints.empty() ? 0 : checkpoints.back();
+    if (target >= cur)
+        return; // rien à annuler
+
+    redoCounts.push_back (cur);  // mémorise pour le redo
+    clip.truncate (target);
 
     std::memset (heldNotes, 0, sizeof (heldNotes));
     allNotesOffPending = true;
 
     if (clip.isEmpty() && loopState == LoopState::Playing)
         loopState = LoopState::Empty;
+}
+
+void Track::redoLastPass()
+{
+    if (redoCounts.empty())
+        return;
+
+    const std::size_t target = redoCounts.back();
+    redoCounts.pop_back();
+    clip.restore (target); // la borne de début de passe (checkpoints.back()) reste valable
+
+    std::memset (heldNotes, 0, sizeof (heldNotes));
+    allNotesOffPending = true;
+
+    if (! clip.isEmpty() && loopState == LoopState::Empty)
+        loopState = LoopState::Playing;
 }
 
 void Track::stopRecording()
@@ -157,7 +166,7 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
     // (l'enregistrement ne s'arrête PAS tout seul ; c'est l'utilisateur qui stoppe).
     if (loopState == LoopState::Recording && transportPlaying && L > 0.0)
         if ((long) std::floor (linEnd / L) > (long) std::floor (linStart / L))
-            passStarts.push_back (clip.size());
+            checkpoints.push_back (clip.size());
 
     // Enregistrement des événements live.
     if (loopState == LoopState::Recording && L > 0.0 && spb > 0.0)
@@ -177,6 +186,7 @@ void Track::renderBlock (const juce::MidiBuffer& liveMidi,
             for (int i = 0; i < n; ++i)
                 bytes[i] = (std::uint8_t) raw[i];
             clip.addEvent (evBeat, bytes, n);
+            redoCounts.clear(); // enregistrer du nouveau invalide la redo
 
             const int ch = msg.getChannel();
             if (ch >= 1 && ch <= 16)

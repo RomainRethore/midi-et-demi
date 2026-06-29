@@ -55,7 +55,8 @@ private:
     juce::Label        barsLabel    { {}, "Mesures" };
     juce::ComboBox     barsCombo;
     juce::TextButton   recordButton { "Enregistrer" };
-    juce::TextButton   undoButton   { "Annuler passe" };
+    juce::TextButton   undoButton   { "Annuler" };
+    juce::TextButton   redoButton   { "Refaire" };
     juce::TextButton   clearButton  { "Effacer" };
     juce::Label        volumeLabel  { {}, "Volume" };
     juce::Slider       volumeSlider;

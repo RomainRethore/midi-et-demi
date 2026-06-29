@@ -31,6 +31,7 @@ public:
     void clearLoop();
     void onTransportStopped();
     void undoLastPass();
+    void redoLastPass();
 
     /** Coupe les notes en cours au prochain bloc (ex. avant un réalignement). */
     void requestAllNotesOff() noexcept { allNotesOffPending = true; }
@@ -47,7 +48,7 @@ public:
     {
         lengthBeats = clip.getLengthBeats();
         const auto& e = clip.getEvents();
-        out.assign (e.begin(), e.end());
+        out.assign (e.begin(), e.begin() + (long) clip.getUsedCount()); // que la partie active
     }
 
     // --- contrôles UI (atomiques) ---
@@ -70,7 +71,8 @@ private:
     LoopState     loopState = LoopState::Empty;
     bool          heldNotes[16][128] = {};
     bool          allNotesOffPending = false;
-    std::vector<std::size_t> passStarts; // taille du clip au début de chaque passe (undo)
+    std::vector<std::size_t> checkpoints; // taille du clip au début de chaque passe (undo)
+    std::vector<std::size_t> redoCounts;  // tailles annulées, à restaurer (redo)
 
     juce::AudioBuffer<float> trackBuffer;
     double currentSampleRate = 44100.0;

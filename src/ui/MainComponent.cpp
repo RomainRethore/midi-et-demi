@@ -74,6 +74,9 @@ MainComponent::MainComponent()
     addAndMakeVisible (undoButton);
     undoButton.onClick = [this] { engine.pressUndo(); };
 
+    addAndMakeVisible (redoButton);
+    redoButton.onClick = [this] { engine.pressRedo(); };
+
     addAndMakeVisible (clearButton);
     clearButton.onClick = [this] { engine.pressClear(); };
 
@@ -157,7 +160,8 @@ void MainComponent::resized()
     barsLabel   .setBounds (activeRow1.removeFromLeft (70).reduced (2));
     barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
     recordButton.setBounds (activeRow1.removeFromLeft (130).reduced (2));
-    undoButton  .setBounds (activeRow1.removeFromLeft (120).reduced (2));
+    undoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
+    redoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));
     clearButton .setBounds (activeRow1.removeFromLeft (90).reduced (2));
     area.removeFromTop (6);
 

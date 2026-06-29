@@ -94,18 +94,18 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                 consumed = true;
                 const int a = juce::jlimit (0, numTracks - 1, activeTrack.load());
 
-                if (slot == 5) // Volume (piste active) — continu
+                if (slot == 6) // Volume (piste active) — continu
                 {
                     if (msg.isController())
                         tracks[(size_t) a].setVolume ((float) ccValue / 127.0f);
                 }
-                else if (slot == 6) // Sélecteur de piste (potard) — continu
+                else if (slot == 7) // Sélecteur de piste (potard) — continu
                 {
                     if (msg.isController())
                         activeTrack.store (juce::jlimit (0, numTracks - 1,
                                                          (ccValue * numTracks) / 128));
                 }
-                else if (slot == 9) // Mesures (piste active) — continu
+                else if (slot == 8) // Mesures (piste active) — continu
                 {
                     if (msg.isController())
                     {
@@ -114,36 +114,28 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
                         tracks[(size_t) a].setBars (barsTable[idx]);
                     }
                 }
-                else if (slot == 10) // BPM (tempo) — continu
+                else if (slot == 9) // BPM (tempo) — continu
                 {
                     if (msg.isController())
                         requestedBpm.store (40.0 + (ccValue / 127.0) * 200.0);
                 }
-                else if (slot >= 11 && slot < 11 + numTracks) // Volume piste N — continu
+                else if (slot >= 10 && slot < 10 + numTracks) // Volume piste N — continu
                 {
                     if (msg.isController())
-                        tracks[(size_t) (slot - 11)].setVolume ((float) ccValue / 127.0f);
+                        tracks[(size_t) (slot - 10)].setVolume ((float) ccValue / 127.0f);
                 }
                 else if (activation)
                 {
                     switch (slot)
                     {
-                        case 0: requestedPlaying.store (! requestedPlaying.load()); break;
-                        case 1: recordPressed.store (true); break;
-                        case 2: clearPressed.store (true); break;
-                        case 3: undoPressed.store (true); break;
-                        case 4: metronomeEnabled.store (! metronomeEnabled.load()); break;
-                        case 7: activeTrack.store (juce::jmin (numTracks - 1, activeTrack.load() + 1)); break;
-                        case 8: activeTrack.store (juce::jmax (0, activeTrack.load() - 1)); break;
-                        case 19: tracks[(size_t) a].setMute (! tracks[(size_t) a].isMuted()); break;
-                        case 28: openEditorRequested.store (true); break;
-                        default:
-                            if (slot >= 20 && slot < 20 + numTracks)
-                            {
-                                auto& tr = tracks[(size_t) (slot - 20)];
-                                tr.setMute (! tr.isMuted());
-                            }
-                            break;
+                        case 0:  requestedPlaying.store (! requestedPlaying.load()); break;
+                        case 1:  recordPressed.store (true); break;
+                        case 2:  clearPressed.store (true); break;
+                        case 3:  undoPressed.store (true); break;
+                        case 4:  redoPressed.store (true); break;
+                        case 5:  metronomeEnabled.store (! metronomeEnabled.load()); break;
+                        case 18: openEditorRequested.store (true); break;
+                        default: break;
                     }
                 }
             }
@@ -189,6 +181,7 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     const bool clearCmd  = clearPressed.exchange (false);
     const bool recordCmd = recordPressed.exchange (false);
     const bool undoCmd   = undoPressed.exchange (false);
+    const bool redoCmd   = redoPressed.exchange (false);
 
     // 3) Transport : tempo + fronts lecture/arrêt.
     transport.setTempo (requestedBpm.load());
@@ -219,6 +212,9 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
 
     if (undoCmd)
         tracks[(size_t) active].undoLastPass();
+
+    if (redoCmd)
+        tracks[(size_t) active].redoLastPass();
 
     if (recordCmd)
     {

@@ -115,7 +115,7 @@ private:
         juce::TextButton clear;
     };
 
-    static constexpr int numSlots    = 29;
+    static constexpr int numSlots    = 19;
     static constexpr int rowH        = 30;
     static constexpr int visibleRows = 12; // au-delà : défilement
 
@@ -127,15 +127,11 @@ private:
     std::array<Row, numSlots> rows;
 
     const std::array<const char*, numSlots> slotNames {
-        "Lecture / Stop", "Enregistrer", "Effacer", "Annuler passe", "Metronome",
-        "Volume (piste active)", "Selecteur de piste (potard)",
-        "Piste suivante", "Piste precedente",
+        "Lecture / Stop", "Enregistrer", "Effacer", "Annuler (undo)", "Refaire (redo)",
+        "Metronome", "Volume (piste active)", "Selecteur de piste (potard)",
         "Mesures (piste active)", "BPM (tempo)",
         "Volume piste 1", "Volume piste 2", "Volume piste 3", "Volume piste 4",
         "Volume piste 5", "Volume piste 6", "Volume piste 7", "Volume piste 8",
-        "Mute (piste active)",
-        "Mute piste 1", "Mute piste 2", "Mute piste 3", "Mute piste 4",
-        "Mute piste 5", "Mute piste 6", "Mute piste 7", "Mute piste 8",
         "Editeur (piste active)"
     };
 };

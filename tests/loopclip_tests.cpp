@@ -123,6 +123,28 @@ int main()
         check (clip.isEmpty(), "truncate(0) vide la boucle");
     }
 
+    // --- restore (redo) ---------------------------------------------------
+    {
+        LoopClip clip;
+        clip.setLengthBeats (4.0);
+        addNote (clip, 0.0, 60);
+        addNote (clip, 1.0, 62);
+        addNote (clip, 2.0, 64);
+
+        clip.truncate (1);
+        check (clip.size() == 1, "undo : truncate(1) -> taille 1");
+
+        clip.restore (3);
+        check (clip.size() == 3, "redo : restore(3) -> taille 3 (donnees conservees)");
+
+        // une nouvelle note apres un undo doit invalider la redo
+        clip.truncate (1);
+        addNote (clip, 0.5, 70);          // branche : ecrase l'historique
+        check (clip.size() == 2, "nouvelle note apres undo -> taille 2");
+        clip.restore (3);
+        check (clip.size() == 2, "restore impossible apres branche (redo invalide)");
+    }
+
     std::cout << "\n" << (testsRun - testsFailed) << "/" << testsRun << " tests OK\n";
     if (testsFailed > 0) { std::cout << testsFailed << " test(s) en echec.\n"; return 1; }
     std::cout << "Tous les tests passent.\n";

@@ -7,9 +7,7 @@
 namespace med // "midi et demi"
 {
 
-/** Un événement MIDI enregistré, positionné en TEMPS musical (battements)
-    dans la boucle. Stocker en temps (et non en samples) rend la boucle
-    indépendante du tempo : changer le BPM ne casse pas le calage. */
+/** Un événement MIDI enregistré, positionné en TEMPS musical (battements). */
 struct ClipEvent
 {
     double  beat = 0.0;          // position dans la boucle, [0, lengthBeats)
@@ -18,30 +16,32 @@ struct ClipEvent
 };
 
 /**
-    Boucle MIDI PURE (sans JUCE) : une longueur (en temps) + une liste
-    d'événements. Sa logique de fenêtrage est testable isolément.
+    Boucle MIDI PURE (sans JUCE).
+
+    Particularité pour l'undo/redo : on distingue le tableau de stockage
+    (`events`) d'un **compteur logique** (`usedCount`). truncate() baisse le
+    compteur sans détruire les données => restore() peut les remettre (redo).
+    Ajouter une note après un undo écrase l'historique de redo (branche
+    abandonnée). Aucune réallocation sur le chemin audio (capacité fixe).
 */
 class LoopClip
 {
 public:
+    static constexpr std::size_t maxEvents = 50000;
+
     void   setLengthBeats (double l) noexcept { lengthBeats = (l > 0.0 ? l : 0.0); }
     double getLengthBeats() const noexcept    { return lengthBeats; }
 
     void reserve (std::size_t n) { events.reserve (n); }
-    void clear() noexcept        { events.clear(); }
-    bool isEmpty() const noexcept { return events.empty(); }
-    std::size_t size() const noexcept { return events.size(); }
 
-    /** Ne garde que les n premiers événements (annulation d'une passe d'overdub). */
-    void truncate (std::size_t n) noexcept { if (n < events.size()) events.resize (n); }
-
-    /** Plafond dur : combiné à reserve(maxEvents), garantit que le tableau ne
-        se réalloue jamais => lecture concurrente sûre depuis l'UI. */
-    static constexpr std::size_t maxEvents = 50000;
+    void clear() noexcept { events.clear(); usedCount = 0; }
+    bool isEmpty() const noexcept { return usedCount == 0; }
+    std::size_t size() const noexcept { return usedCount; }
+    std::size_t getUsedCount() const noexcept { return usedCount; }
 
     void addEvent (double beat, const uint8_t* data, int n)
     {
-        if (events.size() >= maxEvents)
+        if (usedCount >= maxEvents)
             return;
 
         ClipEvent e;
@@ -49,27 +49,42 @@ public:
         e.numBytes = (n > 3 ? 3 : (n < 0 ? 0 : n));
         for (int i = 0; i < e.numBytes; ++i)
             e.bytes[i] = data[i];
-        events.push_back (e);
+
+        if (usedCount < events.size())
+            events[usedCount] = e;     // réécrit un emplacement libéré par un undo
+        else
+            events.push_back (e);
+
+        ++usedCount;
+
+        if (events.size() > usedCount) // une nouvelle note invalide la redo
+            events.resize (usedCount);
     }
 
-    /** Accès lecture seule (pour la visualisation). Le tableau ne réallouant
-        jamais, une copie côté UI est sûre même en cours d'enregistrement. */
+    /** Undo : baisse le compteur logique, garde les données pour un éventuel redo. */
+    void truncate (std::size_t n) noexcept { if (n < usedCount) usedCount = n; }
+
+    /** Redo : remonte le compteur (dans la limite des données conservées). */
+    void restore (std::size_t n) noexcept { usedCount = (n <= events.size() ? n : events.size()); }
+
     const std::vector<ClipEvent>& getEvents() const noexcept { return events; }
 
-    /** Appelle fn(event, offsetBeats) pour chaque événement dont la position
-        est dans [fromBeat, toBeat). offsetBeats = event.beat - fromBeat.
-        Ne gère PAS le bouclage : l'appelant découpe la fenêtre si besoin. */
+    /** fn(event, offsetBeats) pour les événements logiques dans [fromBeat, toBeat). */
     template <class Fn>
     void forEachInWindow (double fromBeat, double toBeat, Fn&& fn) const
     {
-        for (const auto& e : events)
+        for (std::size_t i = 0; i < usedCount; ++i)
+        {
+            const auto& e = events[i];
             if (e.beat >= fromBeat && e.beat < toBeat)
                 fn (e, e.beat - fromBeat);
+        }
     }
 
 private:
     double                 lengthBeats = 0.0;
     std::vector<ClipEvent> events;
+    std::size_t            usedCount = 0;
 };
 
 } // namespace med
