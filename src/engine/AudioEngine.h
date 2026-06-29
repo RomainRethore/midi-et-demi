@@ -78,9 +78,8 @@ private:
     med::Transport transport;
     med::Metronome metronome;
     static constexpr int numerator = 4; // signature 4/4 fixe pour l'instant
-    bool   prevPlaying = false;
-    long   beatCounter = 0;
-    double nextBeatPos = 0.0;
+    bool   prevPlaying  = false;
+    long   nextBeatIndex = 0; // prochain temps entier à sonner (métronome)
 
     std::atomic<double> requestedBpm      { 120.0 };
     std::atomic<bool>   requestedPlaying  { false };

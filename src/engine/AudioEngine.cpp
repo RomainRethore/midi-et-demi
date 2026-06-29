@@ -190,8 +190,7 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
     {
         transport.rewind();
         transport.start();
-        beatCounter = 0;
-        nextBeatPos = 0.0;
+        nextBeatIndex = 0;
         metronome.reset();
         for (auto& track : tracks)        // coupe tout son en cours avant le saut
             track.requestAllNotesOff();
@@ -230,8 +229,7 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
             transport.start();
             requestedPlaying.store (true);
             prevPlaying = true;
-            beatCounter = 0;
-            nextBeatPos = 0.0;
+            nextBeatIndex = 0;
             metronome.reset();
             for (auto& track : tracks)        // coupe tout son en cours avant le saut
                 track.requestAllNotesOff();
@@ -265,22 +263,20 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         }
     }
 
-    // 7) Métronome (per-sample, grille incrémentale) par-dessus le mix.
-    const bool metroOn  = metronomeEnabled.load();
-    const double startPos = transport.getPositionSamples();
+    // 7) Métronome : déclenchement sur les temps entiers (en temps musical,
+    //    donc insensible aux changements de tempo — pas de saut).
+    const bool metroOn = metronomeEnabled.load();
     for (int i = 0; i < numSamples; ++i)
     {
-        if (playing)
+        if (playing && spb > 0.0)
         {
-            const double absPos = startPos + (double) i;
-            while (absPos >= nextBeatPos)
+            const double absBeat = linStart + (double) i / spb;
+            while (absBeat >= (double) nextBeatIndex)
             {
-                const bool downbeat = (beatCounter % numerator == 0);
+                const bool downbeat = (nextBeatIndex % numerator == 0);
                 if (metroOn)
                     metronome.trigger (downbeat);
-
-                ++beatCounter;
-                nextBeatPos += spb;
+                ++nextBeatIndex;
             }
         }
 
