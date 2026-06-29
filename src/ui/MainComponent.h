@@ -49,6 +49,7 @@ private:
     juce::Label        bpmUnitLabel  { {}, "BPM" };
     juce::ToggleButton metronomeToggle { "Metronome" };
     juce::Label        positionLabel;
+    juce::TextButton   keyboardButton { "Clavier" };
 
     // table de mixage : 8 voies
     std::array<std::unique_ptr<ChannelStrip>, 8> strips;

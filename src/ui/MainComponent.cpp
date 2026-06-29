@@ -165,7 +165,17 @@ MainComponent::MainComponent()
     activeInfoLabel.setJustificationType (juce::Justification::centredLeft);
 
     addAndMakeVisible (loopLanes);
+
     addAndMakeVisible (keyboard);
+    keyboard.setVisible (false); // masqué par défaut (R4)
+
+    addAndMakeVisible (keyboardButton);
+    keyboardButton.setClickingTogglesState (true);
+    keyboardButton.onClick = [this]
+    {
+        keyboard.setVisible (keyboardButton.getToggleState());
+        resized();
+    };
 
     for (auto* gp : { &transportGroup, &instrumentGroup, &sessionGroup, &mixerGroup, &loopsGroup })
     {
@@ -220,6 +230,7 @@ void MainComponent::resized()
         bpmSlider      .setBounds (r.removeFromLeft (240).reduced (2));
         bpmUnitLabel   .setBounds (r.removeFromLeft (40).reduced (2));
         metronomeToggle.setBounds (r.removeFromLeft (120).reduced (2));
+        keyboardButton .setBounds (r.removeFromRight (100).reduced (2));
         positionLabel  .setBounds (r.reduced (2));
     }
     area.removeFromTop (gap);
