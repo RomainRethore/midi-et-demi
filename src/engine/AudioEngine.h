@@ -145,6 +145,8 @@ public:
     void setActiveTrackPadBase (int note);
     juce::String getActiveTrackSampleName (int pad);
     int  getActiveTrackPadBase();
+    /** Joue le sample du pad sur la piste active (pré-écoute). */
+    void triggerActivePad (int pad);
 
     // --- transport ---
     void   setTempo (double bpm) noexcept         { source.setTempo (bpm); }

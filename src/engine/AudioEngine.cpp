@@ -378,6 +378,14 @@ int AudioEngine::getActiveTrackPadBase()
     return source.getTrack (source.getActiveTrack()).getPadBaseNote();
 }
 
+void AudioEngine::triggerActivePad (int pad)
+{
+    const int note = juce::jlimit (0, 127, getActiveTrackPadBase() + pad);
+    auto m = juce::MidiMessage::noteOn (1, note, (juce::uint8) 110);
+    m.setTimeStamp (juce::Time::getMillisecondCounterHiRes() * 0.001);
+    source.getMidiCollector()->addMessageToQueue (m);
+}
+
 AudioEngine::~AudioEngine()
 {
     for (auto& input : juce::MidiInput::getAvailableDevices())
