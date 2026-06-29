@@ -128,6 +128,14 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
 > Le mapping est **sauvegardé automatiquement** (fichier global
 > `~/Library/Application Support/Midi et demi/mapping.json`) et rechargé au démarrage.
 
+### Pads / samples
+- Sur la piste active, clique **« Pads… »** : charge un **sample par pad**
+  (16 pads = 2 banques). « Note pad 1 » = note MIDI du 1er pad (défaut 36) ;
+  les pads suivants sont base+1, base+2, … (vérifie avec le moniteur du mapping).
+- Tape les pads → ils jouent les samples. Comme c'est une **piste**, tu peux
+  **enregistrer/boucler** tes patterns (overdub, undo, etc.) comme le reste.
+- Priorité instrument de la piste : **sampler** (si des pads chargés) > plugin > synthé.
+
 ### Étape 8 — sauvegarde de session
 - **Enreg. session** / **Ouvrir session** (rangée des pistes) : fichier `.mdemi`.
 - Sauvegarde : tempo + par piste (instrument **et son preset/réglages**, notes,

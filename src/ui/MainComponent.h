@@ -6,6 +6,7 @@
 #include "ui/PluginEditorWindow.h"
 #include "ui/LoopLanes.h"
 #include "ui/MappingWindow.h"
+#include "ui/PadWindow.h"
 
 /**
     Couche UI (étape 4a). Transport partagé + sélecteur de PISTE ACTIVE (1-8) :
@@ -56,6 +57,7 @@ private:
     // contrôles de la piste active
     juce::TextButton   loadButton   { "Charger un plugin..." };
     juce::TextButton   editorButton { "Editeur" };
+    juce::TextButton   padsButton   { "Pads..." };
     juce::Label        barsLabel    { {}, "Mesures" };
     juce::ComboBox     barsCombo;
     juce::TextButton   recordButton { "Enregistrer" };
@@ -73,6 +75,7 @@ private:
     std::unique_ptr<juce::FileChooser>  fileChooser;
     std::unique_ptr<PluginEditorWindow> pluginWindow;
     std::unique_ptr<MappingWindow>      mappingWindow;
+    std::unique_ptr<PadWindow>          padWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

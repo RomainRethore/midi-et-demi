@@ -124,6 +124,13 @@ public:
     juce::AudioPluginInstance* getActivePlugin() noexcept;
     juce::String getStatusText();
 
+    // --- pads / samples (sur la piste active) ---
+    juce::String loadSampleToActiveTrack (int pad, const juce::File& file);
+    void clearActiveTrackSample (int pad);
+    void setActiveTrackPadBase (int note);
+    juce::String getActiveTrackSampleName (int pad);
+    int  getActiveTrackPadBase();
+
     // --- transport ---
     void   setTempo (double bpm) noexcept         { source.setTempo (bpm); }
     void   setPlaying (bool shouldPlay) noexcept  { source.setPlaying (shouldPlay); }
@@ -183,6 +190,7 @@ private:
     juce::MidiKeyboardState  keyboardState;
     EngineAudioSource        source { keyboardState };
     PluginHost               pluginHost;
+    juce::AudioFormatManager  sampleFormatManager;
     juce::StringArray        openedMidiInputs;
     std::array<juce::String, EngineAudioSource::numTracks> trackPluginPath;
 

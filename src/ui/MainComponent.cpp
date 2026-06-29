@@ -99,6 +99,14 @@ MainComponent::MainComponent()
     addAndMakeVisible (editorButton);
     editorButton.onClick = [this] { showPluginEditor(); };
 
+    addAndMakeVisible (padsButton);
+    padsButton.onClick = [this]
+    {
+        if (padWindow != nullptr) { padWindow->toFront (true); return; }
+        padWindow = std::make_unique<PadWindow> (engine);
+        padWindow->onCloseButton = [this] { padWindow = nullptr; };
+    };
+
     addAndMakeVisible (barsLabel);
     barsLabel.setJustificationType (juce::Justification::centredRight);
 
@@ -168,6 +176,7 @@ MainComponent::~MainComponent()
     stopTimer();
     pluginWindow  = nullptr;
     mappingWindow = nullptr;
+    padWindow     = nullptr;
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -202,9 +211,10 @@ void MainComponent::resized()
     area.removeFromTop (8);
 
     auto activeRow1 = area.removeFromTop (38);
-    loadButton  .setBounds (activeRow1.removeFromLeft (180).reduced (2));
-    editorButton.setBounds (activeRow1.removeFromLeft (90).reduced (2));
-    barsLabel   .setBounds (activeRow1.removeFromLeft (70).reduced (2));
+    loadButton  .setBounds (activeRow1.removeFromLeft (160).reduced (2));
+    editorButton.setBounds (activeRow1.removeFromLeft (80).reduced (2));
+    padsButton  .setBounds (activeRow1.removeFromLeft (80).reduced (2));
+    barsLabel   .setBounds (activeRow1.removeFromLeft (66).reduced (2));
     barsCombo   .setBounds (activeRow1.removeFromLeft (60).reduced (2));
     recordButton.setBounds (activeRow1.removeFromLeft (130).reduced (2));
     undoButton  .setBounds (activeRow1.removeFromLeft (90).reduced (2));

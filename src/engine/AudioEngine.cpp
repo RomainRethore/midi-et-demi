@@ -295,7 +295,35 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
 //==============================================================================
 // AudioEngine
 //==============================================================================
-AudioEngine::AudioEngine() = default;
+AudioEngine::AudioEngine()
+{
+    sampleFormatManager.registerBasicFormats(); // wav, aiff, flac, ogg...
+}
+
+juce::String AudioEngine::loadSampleToActiveTrack (int pad, const juce::File& file)
+{
+    return source.getTrack (source.getActiveTrack()).loadSample (pad, file, sampleFormatManager);
+}
+
+void AudioEngine::clearActiveTrackSample (int pad)
+{
+    source.getTrack (source.getActiveTrack()).clearSample (pad, sampleFormatManager);
+}
+
+void AudioEngine::setActiveTrackPadBase (int note)
+{
+    source.getTrack (source.getActiveTrack()).setPadBaseNote (note, sampleFormatManager);
+}
+
+juce::String AudioEngine::getActiveTrackSampleName (int pad)
+{
+    return source.getTrack (source.getActiveTrack()).getSampleName (pad);
+}
+
+int AudioEngine::getActiveTrackPadBase()
+{
+    return source.getTrack (source.getActiveTrack()).getPadBaseNote();
+}
 
 AudioEngine::~AudioEngine()
 {
@@ -494,6 +522,13 @@ bool AudioEngine::saveSession (const juce::File& file)
             to->setProperty ("plugin", juce::var (po));
         }
 
+        // pads / samples
+        to->setProperty ("padBase", tr.getPadBaseNote());
+        juce::Array<juce::var> samplesArr;
+        for (int pad = 0; pad < Track::numPads; ++pad)
+            samplesArr.add (tr.getSamplePath (pad));
+        to->setProperty ("samples", samplesArr);
+
         tracksArr.add (juce::var (to));
     }
     root->setProperty ("tracks", tracksArr);
@@ -585,6 +620,15 @@ bool AudioEngine::loadSession (const juce::File& file)
                     tr.setPlugin (std::move (inst));
                 }
             }
+
+            // pads / samples
+            const int padBase = to->getProperty ("padBase").isInt()
+                                  ? (int) to->getProperty ("padBase") : 36;
+            juce::StringArray samplePaths;
+            if (auto* sa = to->getProperty ("samples").getArray())
+                for (auto& sv : *sa)
+                    samplePaths.add (sv.toString());
+            tr.loadSamples (samplePaths, padBase, sampleFormatManager);
 
             tr.loadClip (length, notes, controls);
         }
