@@ -64,6 +64,13 @@ public:
     void releaseResources() override {}
     void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override;
 
+    // --- export audio (capture temps réel du mix, métronome exclu) ---
+    void startCapture (const juce::File& file);
+    void stopCapture();
+    bool isCapturing() const noexcept { return capturingFlag.load(); }
+
+    ~EngineAudioSource() override;
+
 private:
     /** Apprentissage + résolution des contrôles mappés ; filtre 'live' des
         messages consommés (ceux qui déclenchent une action ne jouent pas). */
@@ -100,6 +107,14 @@ private:
     std::atomic<int>    lastMidiCode     { -1 };
     std::atomic<int>    lastMidiValue    { 0 };
     std::atomic<bool>   openEditorRequested { false };
+
+    // --- export audio (capture WAV temps réel) ---
+    double                 currentSampleRate = 44100.0;
+    juce::TimeSliceThread  writerThread { "wav-writer" };
+    std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> threadedWriter;
+    std::atomic<juce::AudioFormatWriter::ThreadedWriter*>    activeWriter { nullptr };
+    juce::CriticalSection  writerLock;
+    std::atomic<bool>      capturingFlag { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EngineAudioSource)
 };
@@ -167,6 +182,11 @@ public:
     /** Sauvegarde / chargement de session (pistes + son + tempo). */
     bool saveSession (const juce::File& file);
     bool loadSession (const juce::File& file);
+
+    /** Export audio (capture temps réel du mix vers un WAV). */
+    void startCapture (const juce::File& file) { source.startCapture (file); }
+    void stopCapture()                          { source.stopCapture(); }
+    bool isCapturing() const noexcept           { return source.isCapturing(); }
 
     void   setTrackVolume (int i, float v) noexcept { source.getTrack (i).setVolume (v); }
     float  getTrackVolume (int i) noexcept          { return source.getTrack (i).getVolume(); }

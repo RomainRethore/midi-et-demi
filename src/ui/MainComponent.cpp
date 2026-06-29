@@ -5,7 +5,7 @@
 MainComponent::MainComponent()
 {
     addAndMakeVisible (titleLabel);
-    titleLabel.setText ("Midi et demi - sauvegarde de session (etape 8)", juce::dontSendNotification);
+    titleLabel.setText ("Midi et demi - export audio (etape 9)", juce::dontSendNotification);
     titleLabel.setFont (juce::Font (20.0f, juce::Font::bold));
     titleLabel.setJustificationType (juce::Justification::centred);
 
@@ -89,6 +89,29 @@ MainComponent::MainComponent()
                     selectTrack (0);            // rafraîchit les contrôles de la piste active
                 else
                     statusLabel.setText ("Echec de l'ouverture", juce::dontSendNotification);
+            });
+    };
+
+    addAndMakeVisible (exportButton);
+    exportButton.onClick = [this]
+    {
+        if (engine.isCapturing()) { engine.stopCapture(); return; }
+
+        auto dir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+        fileChooser = std::make_unique<juce::FileChooser> (
+            "Exporter le morceau en WAV", dir.getChildFile ("morceau.wav"), "*.wav");
+
+        fileChooser->launchAsync (juce::FileBrowserComponent::saveMode
+                                  | juce::FileBrowserComponent::canSelectFiles
+                                  | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this] (const juce::FileChooser& fc)
+            {
+                auto f = fc.getResult();
+                if (f == juce::File{})
+                    return;
+                if (f.getFileExtension().isEmpty())
+                    f = f.withFileExtension ("wav");
+                engine.startCapture (f);
             });
     };
 
@@ -208,6 +231,7 @@ void MainComponent::resized()
     trackRow.removeFromLeft (16);
     sessionSaveButton.setBounds (trackRow.removeFromLeft (130).reduced (2));
     sessionOpenButton.setBounds (trackRow.removeFromLeft (130).reduced (2));
+    exportButton     .setBounds (trackRow.removeFromLeft (140).reduced (2));
     area.removeFromTop (8);
 
     auto activeRow1 = area.removeFromTop (38);
@@ -306,6 +330,19 @@ void MainComponent::timerCallback()
     {
         recordButton.setButtonText (state == 3 ? "Overdub" : "Enregistrer");
         recordButton.setColour (juce::TextButton::buttonColourId,
+                                getLookAndFeel().findColour (juce::TextButton::buttonColourId));
+    }
+
+    // Bouton export (capture WAV en cours ?)
+    if (engine.isCapturing())
+    {
+        exportButton.setButtonText ("Stop export");
+        exportButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xffc62828));
+    }
+    else
+    {
+        exportButton.setButtonText ("Exporter (.wav)");
+        exportButton.setColour (juce::TextButton::buttonColourId,
                                 getLookAndFeel().findColour (juce::TextButton::buttonColourId));
     }
 

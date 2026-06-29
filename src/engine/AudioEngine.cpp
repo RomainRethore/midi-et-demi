@@ -10,6 +10,45 @@ EngineAudioSource::EngineAudioSource (juce::MidiKeyboardState& keyStateToUse)
 {
     for (auto& sig : publishedSig)
         sig.store (-1);
+
+    writerThread.startThread(); // thread d'écriture disque (export WAV)
+}
+
+EngineAudioSource::~EngineAudioSource()
+{
+    stopCapture();
+    writerThread.stopThread (2000);
+}
+
+void EngineAudioSource::startCapture (const juce::File& file)
+{
+    stopCapture();
+    file.deleteFile();
+
+    auto stream = file.createOutputStream();
+    if (stream == nullptr)
+        return;
+
+    juce::WavAudioFormat wav;
+    if (auto* writer = wav.createWriterFor (stream.get(), currentSampleRate, 2, 24, {}, 0))
+    {
+        stream.release(); // le writer possède désormais le flux
+        threadedWriter.reset (new juce::AudioFormatWriter::ThreadedWriter (writer, writerThread, 32768));
+
+        const juce::ScopedLock sl (writerLock);
+        activeWriter = threadedWriter.get();
+        capturingFlag = true;
+    }
+}
+
+void EngineAudioSource::stopCapture()
+{
+    {
+        const juce::ScopedLock sl (writerLock);
+        activeWriter = nullptr;
+        capturingFlag = false;
+    }
+    threadedWriter.reset(); // vide le tampon + ferme le fichier
 }
 
 void EngineAudioSource::republishMap()
@@ -150,6 +189,7 @@ void EngineAudioSource::resolveMapping (juce::MidiBuffer& live)
 
 void EngineAudioSource::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
+    currentSampleRate = sampleRate;
     midiCollector.reset (sampleRate);
 
     transport.prepare (sampleRate);
@@ -260,6 +300,19 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         {
             const int srcCh = juce::jmin (ch, tb.getNumChannels() - 1);
             bufferToFill.buffer->addFrom (ch, startSample, tb, srcCh, 0, numSamples, gain);
+        }
+    }
+
+    // 6b) Export audio : on capture le mix musical AVANT d'ajouter le métronome.
+    {
+        const juce::ScopedLock sl (writerLock);
+        if (auto* w = activeWriter.load())
+        {
+            const float* chans[2];
+            for (int ch = 0; ch < 2; ++ch)
+                chans[ch] = bufferToFill.buffer->getReadPointer (juce::jmin (ch, numCh - 1),
+                                                                 startSample);
+            w->write (chans, numSamples);
         }
     }
 

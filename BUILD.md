@@ -143,6 +143,13 @@ Si tu as ça : l'incrément **1a est validé**, toute la chaîne fonctionne. �
   resonne à l'identique (les plugins sont rechargés et restaurés).
 - L'audio se met brièvement en pause pendant save/load (normal).
 
+### Étape 9 — export audio (.wav)
+- **Exporter (.wav)** (rangée des pistes) : choisis un fichier, l'app **capture
+  en temps réel** ce que tu joues (mix des pistes). Joue ta performance
+  (déclenche/coupe les pistes, joue en live), puis reclique **Stop export**.
+- Le **métronome n'est PAS** dans l'export. L'écriture disque se fait sur un
+  thread séparé (aucune coupure de son).
+
 ---
 
 ## 6. Si ça coince

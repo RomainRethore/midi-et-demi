@@ -50,9 +50,10 @@ private:
     juce::Label                      tracksLabel { {}, "Piste active" };
     std::array<juce::TextButton, 8>  trackButtons;
 
-    // session
+    // session + export
     juce::TextButton sessionSaveButton { "Enreg. session" };
     juce::TextButton sessionOpenButton { "Ouvrir session" };
+    juce::TextButton exportButton      { "Exporter (.wav)" };
 
     // contrôles de la piste active
     juce::TextButton   loadButton   { "Charger un plugin..." };
