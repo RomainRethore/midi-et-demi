@@ -6,11 +6,9 @@
 #include "engine/SineSynth.h"
 
 /**
-    Une PISTE (couche engine) : son propre instrument (plugin ou synthé sinus),
-    sa boucle MIDI, son volume / mute, et sa machine d'état d'enregistrement.
-    Rendue dans son buffer interne, puis mixée par le moteur.
-
-    État détenu par le fil audio ; les contrôles UI passent par des atomiques.
+    Une PISTE (couche engine) : son instrument (plugin ou synthé sinus), sa
+    boucle MIDI (stockée par note), son volume / mute, sa machine d'état
+    d'enregistrement. Undo/redo se font NOTE PAR NOTE.
 */
 class Track
 {
@@ -25,30 +23,28 @@ public:
     juce::AudioPluginInstance* getPlugin() const noexcept { return plugin.get(); }
     juce::String getPluginName() const;
 
-    // --- commandes (fil audio, appelées par le moteur) ---
+    // --- commandes (fil audio) ---
     void startRecording (double lengthBeats);
     void stopRecording();
     void clearLoop();
     void onTransportStopped();
-    void undoLastPass();
-    void redoLastPass();
+    void undo(); // retire la dernière note
+    void redo(); // remet la dernière note annulée
 
-    /** Coupe les notes en cours au prochain bloc (ex. avant un réalignement). */
     void requestAllNotesOff() noexcept { allNotesOffPending = true; }
 
-    /** Rend un bloc dans le buffer interne (0-based, numSamples). */
     void renderBlock (const juce::MidiBuffer& liveMidi,
                       double linStart, double deltaBeats, double spb,
                       bool transportPlaying, int numSamples);
 
     const juce::AudioBuffer<float>& getOutput() const noexcept { return trackBuffer; }
 
-    /** Copie les événements + la longueur pour la visualisation (appelé par l'UI). */
-    void getDisplayData (std::vector<med::ClipEvent>& out, double& lengthBeats) const
+    /** Copie les notes + la longueur pour la visualisation (appelé par l'UI). */
+    void getDisplayData (std::vector<med::Note>& out, double& lengthBeats) const
     {
         lengthBeats = clip.getLengthBeats();
-        const auto& e = clip.getEvents();
-        out.assign (e.begin(), e.begin() + (long) clip.getUsedCount()); // que la partie active
+        const auto& n = clip.getNotes();
+        out.assign (n.begin(), n.begin() + (long) clip.getUsedCount());
     }
 
     // --- contrôles UI (atomiques) ---
@@ -69,10 +65,12 @@ private:
 
     med::LoopClip clip;
     LoopState     loopState = LoopState::Empty;
-    bool          heldNotes[16][128] = {};
     bool          allNotesOffPending = false;
-    std::vector<std::size_t> checkpoints; // taille du clip au début de chaque passe (undo)
-    std::vector<std::size_t> redoCounts;  // tailles annulées, à restaurer (redo)
+
+    // Notes en cours d'enregistrement (note-on en attente de note-off).
+    bool    noteHeld  [16][128] = {};
+    double  noteStart [16][128] = {};
+    uint8_t noteVel   [16][128] = {};
 
     juce::AudioBuffer<float> trackBuffer;
     double currentSampleRate = 44100.0;

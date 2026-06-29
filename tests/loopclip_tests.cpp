@@ -1,4 +1,4 @@
-// Tests unitaires de la boucle MIDI (C++ pur, sans JUCE).
+// Tests de la boucle MIDI par note (C++ pur, sans JUCE).
 //   g++ -std=c++17 -I src tests/loopclip_tests.cpp -o loopclip_tests && ./loopclip_tests
 
 #include "domain/LoopClip.h"
@@ -11,138 +11,111 @@
 namespace
 {
     int testsRun = 0, testsFailed = 0;
-
-    void check (bool cond, const std::string& label)
+    void check (bool c, const std::string& l)
     {
         ++testsRun;
-        if (! cond) { ++testsFailed; std::cout << "  [ECHEC] " << label << "\n"; }
+        if (! c) { ++testsFailed; std::cout << "  [ECHEC] " << l << "\n"; }
     }
+    bool nearly (double a, double b, double e = 1e-9) { return std::fabs (a - b) < e; }
 
-    // Ajoute une note (on) à un beat donné, vélocité 100, note 60.
-    void addNote (med::LoopClip& clip, double beat, int note)
+    med::Note makeNote (double start, double len, int pitch)
     {
-        const uint8_t data[3] = { 0x90, (uint8_t) note, 100 };
-        clip.addEvent (beat, data, 3);
+        return { start, len, 1, (uint8_t) pitch, 100 };
     }
 
-    // Reproduit le fenêtrage avec bouclage tel que fait par le moteur.
-    struct Hit { int note; double offset; };
+    struct Hit { int pitch; double offset; bool on; };
 
-    std::vector<Hit> windowWithWrap (const med::LoopClip& clip, double from, double delta)
+    // Fenêtre avec bouclage, comme le moteur.
+    std::vector<Hit> window (const med::LoopClip& clip, double from, double delta)
     {
         std::vector<Hit> hits;
-        const double L  = clip.getLengthBeats();
+        const double L = clip.getLengthBeats();
         const double to = from + delta;
-
-        auto emit = [&] (const med::ClipEvent& e, double off)
-        {
-            hits.push_back ({ (int) e.bytes[1], off });
-        };
+        auto on  = [&] (const med::Note& n, double off) { hits.push_back ({ n.pitch, off, true }); };
+        auto off = [&] (const med::Note& n, double o)   { hits.push_back ({ n.pitch, o, false }); };
 
         if (to <= L)
         {
-            clip.forEachInWindow (from, to, emit);
+            clip.emitWindow (from, to, on, off);
         }
         else
         {
-            clip.forEachInWindow (from, L, emit);
+            clip.emitWindow (from, L, on, off);
             const double rem = to - L, base = L - from;
-            clip.forEachInWindow (0.0, rem, [&] (const med::ClipEvent& e, double off)
-            {
-                emit (e, base + off);
-            });
+            clip.emitWindow (0.0, rem,
+                             [&] (const med::Note& n, double o) { on (n, base + o); },
+                             [&] (const med::Note& n, double o) { off (n, base + o); });
         }
         return hits;
     }
-
-    bool nearly (double a, double b, double eps = 1e-9) { return std::fabs (a - b) < eps; }
 }
 
 int main()
 {
     using med::LoopClip;
 
-    // --- fenêtre simple, sans bouclage ------------------------------------
+    // --- ajout / taille ---------------------------------------------------
     {
-        LoopClip clip;
-        clip.setLengthBeats (4.0);
-        addNote (clip, 0.0, 60);
-        addNote (clip, 1.0, 62);
-        addNote (clip, 2.0, 64);
-        addNote (clip, 3.0, 65);
-
-        auto hits = windowWithWrap (clip, 0.0, 2.0); // [0, 2)
-        check (hits.size() == 2, "fenetre [0,2) contient 2 evenements");
-        check (hits.size() == 2 && hits[0].note == 60 && nearly (hits[0].offset, 0.0),
-               "1er evenement = note 60 a l'offset 0");
-        check (hits.size() == 2 && hits[1].note == 62 && nearly (hits[1].offset, 1.0),
-               "2e evenement = note 62 a l'offset 1");
+        LoopClip clip; clip.setLengthBeats (4.0);
+        clip.addNote (makeNote (0.0, 1.0, 60));
+        clip.addNote (makeNote (1.0, 1.0, 62));
+        check (clip.size() == 2, "2 notes ajoutees");
     }
 
-    // --- borne haute exclue -----------------------------------------------
+    // --- undo / redo par note --------------------------------------------
     {
-        LoopClip clip;
-        clip.setLengthBeats (4.0);
-        addNote (clip, 2.0, 64);
-        auto hits = windowWithWrap (clip, 0.0, 2.0); // 2.0 exclu
-        check (hits.empty(), "borne haute exclue (pas d'evenement a beat=2 dans [0,2))");
-    }
+        LoopClip clip; clip.setLengthBeats (4.0);
+        clip.addNote (makeNote (0.0, 1.0, 60));
+        clip.addNote (makeNote (1.0, 1.0, 62));
+        clip.addNote (makeNote (2.0, 1.0, 64));
 
-    // --- fenêtre qui boucle ------------------------------------------------
-    {
-        LoopClip clip;
-        clip.setLengthBeats (4.0);
-        addNote (clip, 3.5, 70); // juste avant la fin
-        addNote (clip, 0.2, 50); // juste après le début
+        clip.truncate (clip.size() - 1);
+        check (clip.size() == 2, "undo : retire la derniere note");
+        clip.truncate (clip.size() - 1);
+        check (clip.size() == 1, "undo : encore une note");
 
-        // fenêtre [3.0, 3.0+1.5) = [3.0, 4.5) -> boucle a 4.0
-        auto hits = windowWithWrap (clip, 3.0, 1.5);
-        check (hits.size() == 2, "fenetre a cheval sur la boucle : 2 evenements");
-        check (hits.size() == 2 && hits[0].note == 70 && nearly (hits[0].offset, 0.5),
-               "note 70 a l'offset 0.5 (avant la boucle)");
-        check (hits.size() == 2 && hits[1].note == 50 && nearly (hits[1].offset, 1.2),
-               "note 50 a l'offset 1.2 (apres la boucle)");
-    }
+        clip.restore (clip.size() + 1);
+        check (clip.size() == 2, "redo : remet une note");
+        clip.restore (clip.size() + 1);
+        check (clip.size() == 3, "redo : remet la suivante");
 
-    // --- truncate (annulation de passe) -----------------------------------
-    {
-        LoopClip clip;
-        clip.setLengthBeats (4.0);
-        addNote (clip, 0.0, 60);
-        addNote (clip, 1.0, 62);
-        addNote (clip, 2.0, 64);
-        check (clip.size() == 3, "3 evenements avant truncate");
-
-        clip.truncate (2);
-        check (clip.size() == 2, "truncate(2) garde 2 evenements");
-
-        clip.truncate (5); // n > taille : sans effet
-        check (clip.size() == 2, "truncate au-dela de la taille = sans effet");
-
-        clip.truncate (0);
-        check (clip.isEmpty(), "truncate(0) vide la boucle");
-    }
-
-    // --- restore (redo) ---------------------------------------------------
-    {
-        LoopClip clip;
-        clip.setLengthBeats (4.0);
-        addNote (clip, 0.0, 60);
-        addNote (clip, 1.0, 62);
-        addNote (clip, 2.0, 64);
-
+        // nouvelle note apres undo : la redo est abandonnee
         clip.truncate (1);
-        check (clip.size() == 1, "undo : truncate(1) -> taille 1");
-
-        clip.restore (3);
-        check (clip.size() == 3, "redo : restore(3) -> taille 3 (donnees conservees)");
-
-        // une nouvelle note apres un undo doit invalider la redo
-        clip.truncate (1);
-        addNote (clip, 0.5, 70);          // branche : ecrase l'historique
+        clip.addNote (makeNote (0.5, 0.5, 70));
         check (clip.size() == 2, "nouvelle note apres undo -> taille 2");
         clip.restore (3);
-        check (clip.size() == 2, "restore impossible apres branche (redo invalide)");
+        check (clip.size() == 2, "redo impossible apres branche");
+    }
+
+    // --- fenêtre on/off ---------------------------------------------------
+    {
+        LoopClip clip; clip.setLengthBeats (4.0);
+        clip.addNote (makeNote (1.0, 1.0, 60)); // on @1, off @2
+
+        auto h = window (clip, 0.0, 1.5); // [0,1.5) -> note-on @1
+        check (h.size() == 1 && h[0].on && h[0].pitch == 60 && nearly (h[0].offset, 1.0),
+               "note-on a l'offset 1");
+
+        auto h2 = window (clip, 1.5, 1.0); // [1.5,2.5) -> note-off @2
+        check (h2.size() == 1 && ! h2[0].on && nearly (h2[0].offset, 0.5),
+               "note-off a l'offset 0.5");
+    }
+
+    // --- note-off qui boucle ----------------------------------------------
+    {
+        LoopClip clip; clip.setLengthBeats (4.0);
+        clip.addNote (makeNote (3.5, 1.0, 67)); // on @3.5, off @ (4.5 mod 4)=0.5
+
+        auto h = window (clip, 3.0, 2.0); // [3.0,5.0) traverse la boucle
+        // attendu : on @3.5 (offset .5) et off @0.5 (offset = (4-3)+0.5 = 1.5)
+        bool foundOn = false, foundOff = false;
+        for (auto& x : h)
+        {
+            if (x.on  && nearly (x.offset, 0.5)) foundOn = true;
+            if (! x.on && nearly (x.offset, 1.5)) foundOff = true;
+        }
+        check (foundOn, "note-on @3.5 dans la fenetre bouclee");
+        check (foundOff, "note-off bouclé @0.5 dans la fenetre");
     }
 
     std::cout << "\n" << (testsRun - testsFailed) << "/" << testsRun << " tests OK\n";

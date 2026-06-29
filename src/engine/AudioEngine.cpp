@@ -211,10 +211,10 @@ void EngineAudioSource::getNextAudioBlock (const juce::AudioSourceChannelInfo& b
         tracks[(size_t) active].clearLoop();
 
     if (undoCmd)
-        tracks[(size_t) active].undoLastPass();
+        tracks[(size_t) active].undo();
 
     if (redoCmd)
-        tracks[(size_t) active].redoLastPass();
+        tracks[(size_t) active].redo();
 
     if (recordCmd)
     {
